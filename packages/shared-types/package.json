@@ -1,0 +1,8 @@
+{
+  "name": "@avid/shared-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "AVID shared TS<->Rust contracts (source of truth for Tauri IPC). Phase 1+."
+}

@@ -1,0 +1,22 @@
+{
+  "name": "avid",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AVID — AI Video Intelligence & Direction (local-first AI video editor)",
+  "license": "MIT",
+  "packageManager": "npm@10",
+  "workspaces": [
+    "apps/desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "verify:scaffold": "./scripts/verify-scaffold.sh",
+    "typecheck": "echo 'Phase 1: tsc --noEmit (not wired in scaffold)' && exit 1",
+    "lint": "echo 'Phase 1: eslint (not wired in scaffold)' && exit 1",
+    "test": "echo 'Phase 1: vitest (not wired in scaffold)' && exit 1",
+    "tauri:dev": "echo 'Phase 1: tauri dev (not wired in scaffold)' && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

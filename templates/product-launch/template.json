@@ -1,0 +1,8 @@
+{
+  "name": "product-launch",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9.",
+  "category": "marketing",
+  "aspectRatios": ["16:9"],
+  "status": "scaffold"
+}

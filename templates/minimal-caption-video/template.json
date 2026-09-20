@@ -1,0 +1,8 @@
+{
+  "name": "minimal-caption-video",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9.",
+  "category": "general",
+  "aspectRatios": ["16:9", "9:16", "1:1"],
+  "status": "scaffold"
+}

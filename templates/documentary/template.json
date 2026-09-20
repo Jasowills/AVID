@@ -1,0 +1,8 @@
+{
+  "name": "documentary",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9.",
+  "category": "documentary",
+  "aspectRatios": ["16:9"],
+  "status": "scaffold"
+}

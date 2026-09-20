@@ -1,0 +1,8 @@
+{
+  "name": "technical-explainer",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9 (AGENTS §31-34).",
+  "category": "education",
+  "aspectRatios": ["16:9"],
+  "status": "scaffold"
+}

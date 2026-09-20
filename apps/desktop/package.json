@@ -1,0 +1,12 @@
+{
+  "name": "@avid/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AVID desktop app — React frontend + Tauri shell (Phase 1+). Scaffold only.",
+  "scripts": {
+    "dev": "echo 'Phase 1: vite dev (not wired in scaffold)' && exit 1",
+    "build": "echo 'Phase 1: vite build (not wired in scaffold)' && exit 1",
+    "tauri:dev": "echo 'Phase 1: tauri dev (not wired in scaffold)' && exit 1"
+  }
+}

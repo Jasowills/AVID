@@ -1,0 +1,8 @@
+{
+  "name": "youtube-talking-head",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9.",
+  "category": "youtube",
+  "aspectRatios": ["16:9"],
+  "status": "scaffold"
+}

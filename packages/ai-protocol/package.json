@@ -1,0 +1,8 @@
+{
+  "name": "@avid/ai-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "AVID edit-plan + visual-scene JSON schemas and validators (Phase 7/8)."
+}

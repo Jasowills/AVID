@@ -1,0 +1,8 @@
+{
+  "name": "podcast-short",
+  "version": "0.0.0",
+  "description": "Scaffold placeholder. Full template lands in Phase 9.",
+  "category": "short",
+  "aspectRatios": ["9:16"],
+  "status": "scaffold"
+}

@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scaffold:
+    name: scaffold-integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify scaffold structure
+        run: ./scripts/verify-scaffold.sh
+      - name: Check no secrets committed
+        run: |
+          ! grep -rEi "sk-(live|ant|openai)|ghp_|gho_|xox[bpas]-|AKIA[0-9A-Z]{16}" \
+            --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git . \
+            || (echo "possible secret committed" && exit 1)
+
+  # Phase 1+ jobs (enabled as toolchains land; kept explicit so CI intent is reviewable):
+  # node: npm install + tsc --noEmit + eslint + vitest
+  # rust: cargo fmt --check + cargo clippy -- -D warnings + cargo test

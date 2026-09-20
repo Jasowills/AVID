@@ -1,0 +1,73 @@
+# AVID .gitignore — local-first: never commit secrets, media, or build output.
+
+# Deps
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+dist/
+build/
+out/
+target/
+apps/desktop/src-tauri/target/
+*.node
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.exe
+
+# Tauri
+apps/desktop/src-tauri/WixTools/
+
+# Env / secrets — NEVER commit keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Media / projects / caches (local only)
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.aac
+media/
+proxies/
+thumbnails/
+cache/
+exports/
+*.avid/
+*.avid-journal
+
+# Except: tiny deterministic fixtures must be allow-listed explicitly
+!fixtures/**/.gitkeep
+!fixtures/**/README.md
+!fixtures/ai/prompts/*.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*-local*
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/

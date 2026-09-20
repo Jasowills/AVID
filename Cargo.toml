@@ -1,0 +1,28 @@
+# AVID Rust workspace — scaffold manifests only (Phase 0).
+# Real code lands per PLAN.md order: avid-core → avid-project → avid-timeline → avid-media → avid-render → avid-ai → avid-cli.
+# Toolchain pin (rust-toolchain.toml) lands in Phase 0.7.
+
+[workspace]
+members = [
+  "crates/avid-core",
+  "crates/avid-project",
+  "crates/avid-timeline",
+  "crates/avid-media",
+  "crates/avid-render",
+  "crates/avid-ai",
+  "crates/avid-cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Jasowills/AVID"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"

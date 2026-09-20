@@ -1,0 +1,12 @@
+[package]
+name = "avid-timeline"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+avid-core = { path = "../avid-core" }
+
+[lib]
+name = "avid_timeline"
+path = "src/lib.rs"

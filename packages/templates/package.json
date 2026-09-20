@@ -1,0 +1,8 @@
+{
+  "name": "@avid/templates",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "AVID template loader/validator (TS side). Phase 9."
+}
