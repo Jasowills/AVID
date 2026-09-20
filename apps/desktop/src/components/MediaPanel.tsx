@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Button, EmptyState, Panel, TextField } from "@avid/ui";
-import type { MediaInfo } from "@avid/shared-types";
-import { invokeCommand, IpcError } from "../lib/ipc";
+import type { MediaAsset, MediaInfo } from "@avid/shared-types";
+import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
 
 export interface ImportedAsset {
@@ -25,7 +25,7 @@ export function formatDuration(seconds: number | null): string {
  * `probe_media` command and renders structured metadata. Outside Tauri the
  * form explains why probing needs the desktop backend — never a fake result.
  */
-export function MediaPanel() {
+export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId: string) => void }) {
   const [path, setPath] = useState("media/clip.mp4");
   const [info, setInfo] = useState<MediaInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +34,12 @@ export function MediaPanel() {
   const [imported, setImported] = useState<ImportedAsset | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    invokeCommand<MediaAsset[]>("list_assets").then(setAssets).catch(() => undefined);
+  }, [imported]);
 
   async function onProbe(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -143,6 +149,33 @@ export function MediaPanel() {
         <p className="mt-3 text-sm text-avid-success">
           Imported {imported.file_name} ({formatDuration(imported.duration)}) — asset {imported.id}
         </p>
+      )}
+
+      {assets.length > 0 && (
+        <div className="mt-4 border-t border-avid-border-subtle pt-3">
+          <h3 className="mb-2 text-xs font-medium text-avid-secondary">Project media ({assets.length})</h3>
+          <ul className="flex flex-col gap-1">
+            {assets.map((asset) => (
+              <li
+                key={asset.id}
+                className="flex items-center justify-between gap-2 rounded-avid-sm bg-avid-raised px-2 py-1.5"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-avid-primary">{asset.file_name}</span>
+                  <span className="block truncate font-mono text-[11px] text-avid-muted">
+                    {asset.id} · {formatDuration(asset.duration)}
+                  </span>
+                </span>
+                <button
+                  onClick={() => onTranscribeAsset(asset.id)}
+                  className="shrink-0 rounded-avid-sm px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
+                >
+                  Transcribe →
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Panel>
   );

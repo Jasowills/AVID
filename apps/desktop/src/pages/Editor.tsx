@@ -28,6 +28,7 @@ export function Editor() {
   const openProject = useProjectStore((s) => s.openProject);
   const [tab, setTab] = useState<ActiveTab>("Media");
   const [exportOpen, setExportOpen] = useState(false);
+  const [transcriptAssetId, setTranscriptAssetId] = useState("");
 
   useEffect(() => {
     if (id) openProject(id);
@@ -83,9 +84,14 @@ export function Editor() {
             ))}
           </nav>
           {tab === "Media" ? (
-            <MediaPanel />
+            <MediaPanel
+              onTranscribeAsset={(id) => {
+                setTranscriptAssetId(id);
+                setTab("Transcript");
+              }}
+            />
           ) : tab === "Transcript" ? (
-            <TranscriptPanel />
+            <TranscriptPanel assetId={transcriptAssetId} onAssetId={setTranscriptAssetId} />
           ) : tab === "AI" ? (
             <AiPanel />
           ) : (

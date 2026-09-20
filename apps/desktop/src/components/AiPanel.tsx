@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Channel } from "@tauri-apps/api/core";
 import { validateEditPlan, type EditOperation } from "@avid/ai-protocol";
-import type { ApplyReport } from "@avid/shared-types";
+import type { ApplyReport, JobEvent, RoughCutProposal } from "@avid/shared-types";
 import { Button, Panel } from "@avid/ui";
 import { invokeCommand, IpcError } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
@@ -45,6 +46,11 @@ export function AiPanel() {
   const [report, setReport] = useState<ApplyReport | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [proposalAsset, setProposalAsset] = useState("");
+  const [minSilence, setMinSilence] = useState("1.0");
+  const [includeFillers, setIncludeFillers] = useState(true);
+  const [proposing, setProposing] = useState(false);
+  const [proposalNote, setProposalNote] = useState<string | null>(null);
 
   function onValidate(event: FormEvent): void {
     event.preventDefault();
@@ -61,6 +67,42 @@ export function AiPanel() {
     } else {
       setReview(null);
       setErrors(result.errors.map((e) => `${e.path || "(root)"}: ${e.message}`));
+    }
+  }
+
+  async function onPropose(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setProposing(true);
+    setProposalNote(null);
+    setReport(null);
+    setApplyError(null);
+    try {
+      const channel = new Channel<JobEvent>(() => undefined);
+      const proposal = await invokeCommand<RoughCutProposal>("propose_rough_cut", {
+        channel,
+        assetId: proposalAsset.trim(),
+        minSilenceSeconds: Number(minSilence),
+        includeFillers,
+      });
+      if (proposal.cuts.length === 0) {
+        setProposalNote(`Nothing worth cutting found (${proposal.analyzed}). Footage stays untouched.`);
+        return;
+      }
+      setGoal("rough cut");
+      setReview(
+        proposal.cuts.map((cut) => ({
+          op: { type: "remove_range", start: cut.start, end: cut.end, reason: cut.reason } as EditOperation,
+          accepted: true,
+        })),
+      );
+      setErrors([]);
+      setProposalNote(
+        `${proposal.cuts.length} cuts proposed, ${proposal.removable_seconds.toFixed(1)}s removable (${proposal.analyzed}). Review below — nothing applied yet.`,
+      );
+    } catch (e) {
+      setProposalNote(e instanceof IpcError ? e.message : "Proposal failed unexpectedly.");
+    } finally {
+      setProposing(false);
     }
   }
 
@@ -106,7 +148,44 @@ export function AiPanel() {
 
   return (
     <Panel title="AI — plan check" className="flex-1">
-      <form onSubmit={onValidate} className="flex flex-col gap-3">
+      <form onSubmit={onPropose} className="flex flex-col gap-3 border-b border-avid-border-subtle pb-4">
+        <p className="text-sm font-medium text-avid-primary">Rough-cut proposal</p>
+        <label className="flex flex-col gap-1 text-sm text-avid-secondary">
+          Asset id
+          <input
+            value={proposalAsset}
+            onChange={(e) => setProposalAsset(e.target.value)}
+            placeholder="From the Media tab"
+            className="rounded-avid-md border border-avid-border bg-avid-raised px-3 py-2 font-mono text-xs text-avid-primary focus-visible:outline-2 focus-visible:outline-avid-accent"
+          />
+        </label>
+        <div className="flex items-end gap-3">
+          <label className="flex flex-1 flex-col gap-1 text-sm text-avid-secondary">
+            Min silence (s)
+            <input
+              value={minSilence}
+              onChange={(e) => setMinSilence(e.target.value)}
+              inputMode="decimal"
+              className="rounded-avid-md border border-avid-border bg-avid-raised px-3 py-2 text-sm text-avid-primary focus-visible:outline-2 focus-visible:outline-avid-accent"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-avid-secondary">
+            <input
+              type="checkbox"
+              checked={includeFillers}
+              onChange={(e) => setIncludeFillers(e.target.checked)}
+              className="accent-[#4f8cff]"
+            />
+            Fillers
+          </label>
+          <Button type="submit" variant="secondary" disabled={proposing || proposalAsset.trim() === ""}>
+            {proposing ? "Analyzing…" : "Propose"}
+          </Button>
+        </div>
+        {proposalNote && <p className="text-xs text-avid-muted">{proposalNote}</p>}
+      </form>
+
+      <form onSubmit={onValidate} className="mt-4 flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm text-avid-secondary">
           Media duration (seconds)
           <input

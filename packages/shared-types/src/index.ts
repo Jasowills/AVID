@@ -205,3 +205,31 @@ export interface ApplyReport {
   label: string;
   results: OpResult[];
 }
+
+/** Imported media asset (mirrors `avid-project::MediaAsset`). */
+export interface MediaAsset {
+  id: string;
+  file_name: string;
+  relative_path: string;
+  duration: number | null;
+  dimensions: [number, number] | null;
+  hash: string | null;
+}
+
+/** Proposed cut confidence (honest buckets, never fake precision). */
+export type CutConfidence = "high" | "medium";
+
+/** One proposed cut for review (mirrors `ProposedCut`). */
+export interface ProposedCut {
+  start: number;
+  end: number;
+  reason: string;
+  confidence: CutConfidence;
+}
+
+/** Rough-cut proposal (mirrors `RoughCutProposal`). */
+export interface RoughCutProposal {
+  cuts: ProposedCut[];
+  removable_seconds: number;
+  analyzed: string;
+}

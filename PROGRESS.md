@@ -77,13 +77,14 @@
 - [x] LIVE eval vs local Ollama `qwen2.5:7b`: probe + edit-plan with operations (38 s) — ADR-005 path proven
 - [ ] LM Studio/generic-compat/OpenAI-cloud adapters (same shape, untested without targets/keys) + provider config UI + connection test + cloud consent
 
-## Phase 7 — AI Editing 🚧 (validation + apply real, detectors pending)
+## Phase 7 — AI Editing ✅ (detectors + proposal + apply real; advanced pacing later)
 
 - [x] Edit-plan schema + validator (rejects prose/malformed/hallucinated/out-of-range, 9 tests) + eval fixtures
 - [x] `RemoveRangeCommand`: text-delete as one undoable transactional op (22 timeline tests)
 - [x] `apply_operations`: re-validate vs live state → single grouped undo (`AI: goal`) → per-op report; invalid ops reported, never applied
-- [x] AI panel: validate → per-op accept/reject → apply → results; visuals honestly deferred to Phase 8; timeline auto-refreshes
-- [ ] Silence/filler detectors → proposed rough cut (detection, not plumbing, is missing)
+- [x] Detectors: ffmpeg `silencedetect` runner + parser (live-tested: 5 s span + tone true-negative) + transcript filler finder (`um/uh/you know/…`, tested)
+- [x] `propose_rough_cut`: silence (+fillers when transcribed) → sorted proposal with honest High/Medium confidence + removable totals; feeds the same review checkboxes
+- [x] AI panel: validate → per-op accept/reject → apply → results; proposal flow; visuals honestly deferred to Phase 8; timeline auto-refreshes
 
 ## Phase 8 — Visual Intelligence 🚧 (spec validation real, renderer UI pending)
 
@@ -108,7 +109,7 @@
 - [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
 - [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
-- [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [ ] AI rough-cut proposal
+- [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [x] AI rough-cut proposal (detectors + proposal + review + apply)
 - [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
 - [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests
 

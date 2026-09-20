@@ -10,8 +10,13 @@ import { invokeCommand, IpcError } from "../lib/ipc";
  * the `transcribe_media` command and render timed segments. Clicking a
  * segment shows its range (timeline seek lands with playback in Phase 2+).
  */
-export function TranscriptPanel() {
-  const [assetId, setAssetId] = useState("");
+export function TranscriptPanel({
+  assetId,
+  onAssetId: setAssetId,
+}: {
+  assetId: string;
+  onAssetId: (id: string) => void;
+}) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
