@@ -3,8 +3,8 @@
 > Living document. Updated in the same commit as the work. Never mark complete without meeting AGENTS §135 (Definition of Done). No fake completion (AGENTS §136).
 > Legend: `✅ done` · `🚧 in progress` · `⬜ not started` · `⛔ blocked`
 
-**Current phase:** Phase 0 — Research & Architecture (scaffold only)
-**Last updated:** 2026-09-20 — scaffold commit (pre-implementation)
+**Current phase:** Phase 0 — Research & Architecture (research complete, gate review next)
+**Last updated:** 2026-09-20 — Phase 0 research + architecture + ADRs + UX + licensing (docs only, no code per §124)
 **Branch:** `main` · **Remote:** `https://github.com/Jasowills/AVID`
 
 ---
@@ -13,14 +13,14 @@
 
 | ID | Deliverable | Status | Evidence / Notes |
 |----|-------------|--------|------------------|
-| 0.1 | Repo scaffold + README + PLAN + PROGRESS | 🚧 | This commit: structure, docs, verify script; then push to `main` |
-| 0.2 | Competitive/UX research | ⬜ | Target: `docs/research/editors-*.md` + UX pain synthesis |
-| 0.3 | Technical research (≥3 options/subsystem) | ⬜ | Tauri, IPC, FFmpeg, Whisper, timeline libs, Ollama/compat APIs |
-| 0.4 | Architecture proposal | ⬜ | `docs/ARCHITECTURE.md` + boundaries |
-| 0.5 | ADRs 001–008 | ⬜ | `docs/decisions/ADR-00*.md` |
-| 0.6 | UX flows | ⬜ | `docs/ux/` — home, creation, editor, timeline, jobs, AI review |
-| 0.7 | Dev env + CI skeleton | ⬜ | Pinned toolchains, CI green on empty suites |
-| 0.8 | Risk register + licensing | ⬜ | `docs/LEGAL_AND_LICENSING.md` |
+| 0.1 | Repo scaffold + README + PLAN + PROGRESS | ✅ | `fe110c1` pushed to `main`; `AGENTS.MD`→`AGENTS.md` canonical |
+| 0.2 | Competitive/UX research | ✅ | `docs/research/editors-comparison.md` — 10 editors, adopt/avoid/differentiate synthesis |
+| 0.3 | Technical research (≥3 options/subsystem) | ✅ | `tauri.md`, `ffmpeg.md`, `whisper.md`, `local-ai.md`, `timeline.md` — primary sources, recommendations |
+| 0.4 | Architecture proposal | ✅ | `docs/ARCHITECTURE.md` — boundaries, data flows, preview strategy, Phase-1 spikes |
+| 0.5 | ADRs 001–008 | ✅ | `docs/decisions/ADR-001…008` — Tauri, media core, project format, timeline, AI abstraction, rendering, local-first, command safety |
+| 0.6 | UX flows | ✅ | `docs/ux/flows.md` — first-run → home → creation → editor → timeline → transcript → AI review → jobs/errors → providers → export → a11y |
+| 0.7 | Dev env + CI skeleton | 🚧 | `rust-toolchain.toml` + `.nvmrc` added; exact version lockfile pins land in Phase 1 (needs Rust toolchain on build machine — see blockers) |
+| 0.8 | Risk register + licensing | ✅ | `docs/LEGAL_AND_LICENSING.md` — per-dependency table with status; top risks in ARCHITECTURE.md + table below |
 
 ## Phase 1 — Desktop Shell ⬜
 
@@ -102,7 +102,9 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 
 | Date | Blocker / Risk | Owner | Mitigation |
 |------|---------------|-------|------------|
-| 2026-09-20 | Rust toolchain not installed on scaffold machine (`rustc/cargo` missing) | build | Phase 1 must pin + document toolchain; CI must install it; do not assume local Rust |
+| 2026-09-20 | Rust toolchain not installed on scaffold machine (`rustc/cargo` missing) | build | Phase 1 must install/pin toolchain from `rust-toolchain.toml`; CI installs it; do not assume local Rust. Still open. |
+| 2026-09-20 | Seekable preview risk (Tauri `asset://` lacks Range support) | arch | Custom `stream://` Range/206 protocol spike in Phase 1; proxy-first H.264/AAC; per-OS preview matrix. Tracked in ARCHITECTURE.md. |
+| 2026-09-20 | Llama-3.1 weights (Community License, not OSI) + H.264/AAC patents | legal | Tracked in LEGAL_AND_LICENSING.md; Qwen3 default; codec patent exposure reviewed separately from copyright. |
 | — | — | — | — |
 
 ## Changelog (scaffold → …)
@@ -110,3 +112,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | Date | Commit | What changed |
 |------|--------|--------------|
 | 2026-09-20 | `fe110c1` / pushed to `main` | Initial clean scaffold: structure, README, PLAN, PROGRESS, ROADMAP, collab docs, verify script. No app code per AGENTS §157. |
+| 2026-09-20 | Phase 0 research drop (pending push) | Competitive (10 editors) + technical (Tauri/FFmpeg/Whisper/local-AI/timeline) research; ARCHITECTURE.md; ADR-001…008; UX flows; toolchain pins; licensing register. Docs only — gate to Phase 1 is spike validation (preview protocol, sidecar signing, whisper latency, qwen3 eval). |

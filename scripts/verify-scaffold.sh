@@ -9,9 +9,15 @@ ok() { echo "ok: ${1}"; }
 required_files=(
   "AGENTS.md" "README.md" "PLAN.md" "PROGRESS.md" "ROADMAP.md"
   "CONTRIBUTING.md" "DEVELOPMENT.md" "LICENSE"
-  "package.json" "Cargo.toml" ".gitignore" ".editorconfig"
+  "package.json" "Cargo.toml" "rust-toolchain.toml" ".nvmrc" ".gitignore" ".editorconfig"
   "apps/desktop/package.json" "apps/desktop/src-tauri/tauri.conf.json"
-  "docs/ARCHITECTURE.md" "docs/LEGAL_AND_LICENSING.md"
+  "docs/ARCHITECTURE.md" "docs/LEGAL_AND_LICENSING.md" "docs/ux/flows.md"
+  "docs/research/editors-comparison.md" "docs/research/tauri.md" "docs/research/ffmpeg.md"
+  "docs/research/whisper.md" "docs/research/local-ai.md" "docs/research/timeline.md"
+  "docs/decisions/ADR-001-tauri.md" "docs/decisions/ADR-002-rust-media-core.md"
+  "docs/decisions/ADR-003-project-format.md" "docs/decisions/ADR-004-timeline-model.md"
+  "docs/decisions/ADR-005-ai-provider-abstraction.md" "docs/decisions/ADR-006-rendering-architecture.md"
+  "docs/decisions/ADR-007-local-first-ai.md" "docs/decisions/ADR-008-command-based-editing.md"
 )
 required_dirs=(
   "apps/desktop/src" "apps/desktop/src-tauri"

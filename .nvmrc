@@ -1,0 +1,3 @@
+20
+# Node LTS pinned for contributors (engines: >=20 in package.json).
+# Exact npm + Tauri CLI pins land in Phase 1 with the lockfile.

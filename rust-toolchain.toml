@@ -1,0 +1,5 @@
+[toolchain]
+channel = "stable"
+# Pinned in Phase 1 to the exact stable used by CI (target: 1.85+ for Tauri 2.12 readiness).
+# See docs/research/tauri.md §1 (MSRV 1.77.2 minimum for shell plugin today).
+# Never assume the scaffold machine's toolchain: CI installs this file's channel.
