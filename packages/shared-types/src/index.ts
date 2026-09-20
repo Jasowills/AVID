@@ -77,3 +77,55 @@ export interface MediaInfo {
   size: number | null;
   streams: StreamInfo[];
 }
+
+/** Timeline track kind (mirrors `avid-timeline::TrackKind`). */
+export type TrackKind = "video" | "audio" | "text" | "graphics" | "caption";
+
+/** Timeline track (mirrors `avid-timeline::Track`). */
+export interface Track {
+  id: string;
+  kind: TrackKind;
+  index: number;
+  name: string;
+  locked: boolean;
+  muted: boolean;
+}
+
+/** Timeline clip (mirrors `avid-timeline::Clip`). */
+export interface Clip {
+  id: string;
+  source_media_id: string;
+  track_id: string;
+  start: number;
+  duration: number;
+  in_point: number;
+  name: string;
+}
+
+/** Timeline document (mirrors `avid-timeline::Timeline`). */
+export interface Timeline {
+  tracks: Track[];
+  clips: Record<string, Clip>;
+}
+
+/** Transcript word/segment (mirrors `avid-ai` transcript types). */
+export interface TranscriptWord {
+  word: string;
+  start: number;
+  end: number;
+  confidence: number | null;
+}
+
+export interface TranscriptSegment {
+  start: number;
+  end: number;
+  text: string;
+  speaker: string | null;
+  words: TranscriptWord[];
+}
+
+export interface Transcript {
+  language: string;
+  segments: TranscriptSegment[];
+  provider: string;
+}

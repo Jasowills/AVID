@@ -4,6 +4,13 @@ import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { MediaInfo } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
 
+export interface ImportedAsset {
+  id: string;
+  file_name: string;
+  relative_path: string;
+  duration: number | null;
+}
+
 /** Format seconds as m:ss.t for display. Pure — unit-tested. */
 export function formatDuration(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return "—";
@@ -22,6 +29,10 @@ export function MediaPanel() {
   const [info, setInfo] = useState<MediaInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [source, setSource] = useState("");
+  const [imported, setImported] = useState<ImportedAsset | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   async function onProbe(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -35,6 +46,23 @@ export function MediaPanel() {
       setError(e instanceof IpcError ? e.message : "Probing failed unexpectedly.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onImport(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setImportBusy(true);
+    setImportError(null);
+    setImported(null);
+    try {
+      const asset = await invokeCommand<ImportedAsset>("import_media", {
+        sourcePath: source.trim(),
+      });
+      setImported(asset);
+    } catch (e) {
+      setImportError(e instanceof IpcError ? e.message : "Import failed unexpectedly.");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -90,6 +118,29 @@ export function MediaPanel() {
             body="Enter a path inside the project folder and probe it. Import and thumbnails land next."
           />
         </div>
+      )}
+
+      <form onSubmit={onImport} className="mt-4 flex flex-col gap-3 border-t border-avid-border-subtle pt-4">
+        <TextField
+          label="Import file (full path on this machine)"
+          placeholder="/Users/you/Movies/clip.mp4"
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+        />
+        <Button type="submit" variant="secondary" disabled={importBusy || source.trim() === ""}>
+          {importBusy ? "Importing…" : "Import into project"}
+        </Button>
+      </form>
+
+      {importError && (
+        <p role="alert" className="mt-3 text-sm text-avid-danger">
+          {importError}
+        </p>
+      )}
+      {imported && (
+        <p className="mt-3 text-sm text-avid-success">
+          Imported {imported.file_name} ({formatDuration(imported.duration)}) — asset {imported.id}
+        </p>
       )}
     </Panel>
   );

@@ -3,11 +3,15 @@
 //! Thin wrappers over pure helpers — helpers hold the logic and the tests,
 //! commands hold the `#[tauri::command]` attribute and nothing else.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use avid_media::{MediaEngine, MediaInfo};
-use avid_project::{ProjectManifest, ProjectMeta};
+use avid_project::{MediaAsset, ProjectManifest, ProjectMeta};
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, State};
+
+use crate::session::{projects_base, Session};
 
 /// Structured command error: `{code, message}` for the UI's humane error
 /// disclosure (AGENTS §51). Never leaks paths or internals beyond the message.
@@ -29,10 +33,17 @@ impl From<avid_project::ProjectError> for CommandError {
 
 impl From<avid_media::MediaError> for CommandError {
     fn from(error: avid_media::MediaError) -> Self {
-        Self {
-            code: error.code().to_owned(),
-            message: soften(&error),
-        }
+        command_error_from_media(&error)
+    }
+}
+
+/// Map engine errors to user-actionable messages (single place, so the
+/// session layer and commands never invent divergent copy).
+#[must_use]
+pub fn command_error_from_media(error: &avid_media::MediaError) -> CommandError {
+    CommandError {
+        code: error.code().to_owned(),
+        message: soften(error),
     }
 }
 
@@ -126,39 +137,20 @@ pub fn create_project_manifest(
         },
         timeline: serde_json::json!({"tracks": [], "clips": {}}),
         assets: vec![],
+        transcripts: HashMap::new(),
     })
 }
 
-/// Probe a project-relative media file. Pure helper over [`MediaEngine`].
+/// Probe a file already validated to live under the project directory.
+/// Uses the explicit-path engine entry point: containment is established by
+/// [`avid_project::validate_relative_path`] + joining under the session dir.
 pub fn probe_media_file(
     engine: &MediaEngine,
-    relative_path: &str,
+    absolute_path: &str,
 ) -> Result<MediaInfo, CommandError> {
     engine
-        .probe(Path::new(relative_path))
+        .probe_file(Path::new(absolute_path))
         .map_err(CommandError::from)
-}
-
-/// Persist a validated manifest as `<directory>/project.json`.
-/// The directory is user-chosen (dialog) so absolute paths are expected —
-/// it must exist and be a directory. Pure helper; the command is a wrapper.
-pub fn save_project_to_dir(
-    manifest_json: &str,
-    directory: &Path,
-) -> Result<std::path::PathBuf, CommandError> {
-    let manifest = ProjectManifest::from_json(manifest_json)?;
-    if !directory.is_dir() {
-        return Err(CommandError {
-            code: "AVID_PROJECT_001".to_owned(),
-            message: "Choose an existing folder to save the project in.".to_owned(),
-        });
-    }
-    let path = directory.join("project.json");
-    std::fs::write(&path, manifest.to_json()?).map_err(|e| CommandError {
-        code: "AVID_PROJECT_001".to_owned(),
-        message: format!("AVID couldn't write the project file: {e}"),
-    })?;
-    Ok(path)
 }
 
 #[tauri::command]
@@ -178,24 +170,165 @@ pub fn app_info(schema_version: u32) -> AppInfo {
 }
 
 #[tauri::command]
-pub fn create_project(input: NewProjectInput) -> Result<ProjectManifest, CommandError> {
-    // Id + timestamp minted at the boundary (deterministic in tests via helper).
-    let now = std::time::SystemTime::now();
-    let now = format!("{now:?}");
-    create_project_manifest(input, format!("proj-{}", MediaEngine::mint_asset_id()), now)
+pub fn create_project(
+    handle: AppHandle,
+    state: State<'_, crate::AppState>,
+    input: NewProjectInput,
+) -> Result<ProjectManifest, CommandError> {
+    let now = format!("{:?}", std::time::SystemTime::now());
+    let id = format!("proj-{}", MediaEngine::mint_asset_id());
+    let manifest = create_project_manifest(input, id.clone(), now)?;
+    let dir = projects_base_dir(&handle)?.join(&id);
+    let session = Session::create(dir, manifest.clone())?;
+    state.open(session);
+    Ok(manifest)
+}
+
+/// Projects root under app data (`…/avid-projects`), created on demand.
+fn projects_base_dir(handle: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    let base = projects_base(&handle.path().app_data_dir().map_err(|e| CommandError {
+        code: "AVID_PROJECT_001".to_owned(),
+        message: format!("AVID couldn't locate its data folder: {e}"),
+    })?);
+    std::fs::create_dir_all(&base).map_err(|e| CommandError {
+        code: "AVID_PROJECT_001".to_owned(),
+        message: format!("AVID couldn't prepare its data folder: {e}"),
+    })?;
+    Ok(base)
 }
 
 #[tauri::command]
-pub fn probe_media(relative_path: String) -> Result<MediaInfo, CommandError> {
+pub fn open_project(
+    handle: AppHandle,
+    state: State<'_, crate::AppState>,
+    id: String,
+) -> Result<ProjectManifest, CommandError> {
+    // Ids are minted as `proj-<uuid>`; reject traversal before joining paths.
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: "That project id isn't valid.".to_owned(),
+        });
+    }
+    let session = Session::load(projects_base_dir(&handle)?.join(&id))?;
+    let manifest = session.manifest().clone();
+    state.open(session);
+    Ok(manifest)
+}
+
+#[tauri::command]
+pub fn list_projects(handle: AppHandle) -> Result<Vec<ProjectManifest>, CommandError> {
+    let base = projects_base_dir(&handle)?;
+    let mut projects = vec![];
+    let entries = std::fs::read_dir(&base).map_err(|e| CommandError {
+        code: "AVID_PROJECT_001".to_owned(),
+        message: format!("AVID couldn't list projects: {e}"),
+    })?;
+    for entry in entries.flatten() {
+        let manifest_path = entry.path().join("project.json");
+        if let Ok(json) = std::fs::read_to_string(&manifest_path) {
+            if let Ok(manifest) = ProjectManifest::from_json(&json) {
+                projects.push(manifest);
+            }
+        }
+    }
+    Ok(projects)
+}
+
+#[tauri::command]
+pub fn import_media(
+    state: State<'_, crate::AppState>,
+    source_path: String,
+) -> Result<MediaAsset, CommandError> {
     // System binaries until the pinned sidecar ships (ADR-002).
     let engine = MediaEngine::system().map_err(CommandError::from)?;
-    probe_media_file(&engine, &relative_path)
+    state.with_session(|session| session.import_file(&engine, Path::new(&source_path)))
 }
 
 #[tauri::command]
-pub fn save_project(manifest_json: String, directory: String) -> Result<String, CommandError> {
-    save_project_to_dir(&manifest_json, Path::new(&directory))
-        .map(|path| path.display().to_string())
+pub fn transcribe_media(
+    handle: AppHandle,
+    state: State<'_, crate::AppState>,
+    asset_id: String,
+    language: String,
+) -> Result<avid_ai::Transcript, CommandError> {
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    let cache = handle.path().app_cache_dir().map_err(|e| CommandError {
+        code: "AVID_PROJECT_001".to_owned(),
+        message: format!("AVID couldn't locate its cache folder: {e}"),
+    })?;
+    let model = model_path(&cache);
+    let audio_cache = cache.join("avid-audio");
+    state.with_session(|session| {
+        session.transcribe_asset(&engine, &model, &audio_cache, &asset_id, &language)
+    })
+}
+
+/// Speech-model resolution: explicit env override (tests) else app cache.
+/// A missing model is reported downstream with download guidance — never silent.
+fn model_path(cache: &Path) -> std::path::PathBuf {
+    if let Ok(path) = std::env::var("AVID_MODEL_PATH") {
+        return std::path::PathBuf::from(path);
+    }
+    cache.join("avid/models/ggml-tiny.en.bin")
+}
+
+#[tauri::command]
+pub fn timeline_get(
+    state: State<'_, crate::AppState>,
+) -> Result<avid_timeline::Timeline, CommandError> {
+    state.with_session(|session| Ok(session.timeline().clone()))
+}
+
+#[tauri::command]
+pub fn timeline_add_clip(
+    state: State<'_, crate::AppState>,
+    clip: avid_timeline::Clip,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.add_clip(clip))
+}
+
+#[tauri::command]
+pub fn timeline_remove_clip(
+    state: State<'_, crate::AppState>,
+    clip_id: String,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.remove_clip(&clip_id))
+}
+
+#[tauri::command]
+pub fn timeline_split_clip(
+    state: State<'_, crate::AppState>,
+    clip_id: String,
+    at: f64,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.split_clip(&clip_id, at))
+}
+
+#[tauri::command]
+pub fn timeline_undo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
+    state.with_session(|session| session.undo())
+}
+
+#[tauri::command]
+pub fn timeline_redo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
+    state.with_session(|session| session.redo())
+}
+
+#[tauri::command]
+pub fn probe_media(
+    state: State<'_, crate::AppState>,
+    relative_path: String,
+) -> Result<MediaInfo, CommandError> {
+    // System binaries until the pinned sidecar ships (ADR-002).
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    state.with_session(|session| {
+        avid_project::validate_relative_path(&relative_path).map_err(CommandError::from)?;
+        probe_media_file(
+            &engine,
+            &session.dir().join(&relative_path).display().to_string(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -242,29 +375,5 @@ mod tests {
         let info = app_info(avid_project::MANIFEST_VERSION);
         assert_eq!(info.name, "AVID");
         assert_eq!(info.schema_version, avid_project::MANIFEST_VERSION);
-    }
-
-    #[test]
-    fn save_round_trips_through_disk() {
-        let manifest =
-            create_project_manifest(input("Disk"), "id-9".to_owned(), "now".to_owned()).unwrap();
-        let json = manifest.to_json().unwrap();
-        let dir = std::env::temp_dir().join("avid-save-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = save_project_to_dir(&json, &dir).unwrap();
-        assert_eq!(path, dir.join("project.json"));
-        let back = ProjectManifest::from_json(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(manifest, back);
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn save_rejects_bad_manifest_and_missing_dir() {
-        let dir = std::env::temp_dir().join("avid-save-test-missing");
-        std::fs::remove_dir_all(&dir).ok();
-        let manifest =
-            create_project_manifest(input("Disk"), "id-9".to_owned(), "now".to_owned()).unwrap();
-        assert!(save_project_to_dir(&manifest.to_json().unwrap(), &dir).is_err());
-        assert!(save_project_to_dir("{nope", &std::env::temp_dir()).is_err());
     }
 }

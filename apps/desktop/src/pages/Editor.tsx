@@ -4,7 +4,9 @@ import { EmptyState, Panel } from "@avid/ui";
 import { Button } from "@avid/ui";
 import { AiPanel } from "../components/AiPanel";
 import { MediaPanel } from "../components/MediaPanel";
+import { TimelineDock } from "../components/TimelineDock";
 import { TopBar } from "../components/TopBar";
+import { TranscriptPanel } from "../components/TranscriptPanel";
 import { useProjectStore } from "../stores/useProjectStore";
 
 /**
@@ -12,9 +14,9 @@ import { useProjectStore } from "../stores/useProjectStore";
  * Media ingestion (Phase 2), timeline engine (Phase 3), and AI (Phase 6+)
  * plug into the placeholder regions below. Empty states guide, per §57.
  */
-const ACTIVE_TABS = ["Media", "AI"] as const;
+const ACTIVE_TABS = ["Media", "Transcript", "AI"] as const;
 type ActiveTab = (typeof ACTIVE_TABS)[number];
-const COMING_TABS = ["Transcript", "Scenes", "Templates", "Assets", "Audio", "Captions"] as const;
+const COMING_TABS = ["Scenes", "Templates", "Assets", "Audio", "Captions"] as const;
 
 export function Editor() {
   const { id } = useParams<{ id: string }>();
@@ -74,6 +76,8 @@ export function Editor() {
           </nav>
           {tab === "Media" ? (
             <MediaPanel />
+          ) : tab === "Transcript" ? (
+            <TranscriptPanel />
           ) : (
             <AiPanel />
           )}
@@ -114,16 +118,10 @@ export function Editor() {
       </div>
 
       <footer
-        className="flex h-40 shrink-0 flex-col border-t border-avid-border bg-avid-panel p-2"
+        className="h-56 shrink-0 border-t border-avid-border bg-avid-panel p-2"
         aria-label="Timeline"
       >
-        <div className="flex items-center justify-between px-2 pb-2">
-          <span className="text-xs font-medium text-avid-secondary">Timeline</span>
-          <span className="text-xs text-avid-muted">Tracks, trim, split, undo land in Phase 3</span>
-        </div>
-        <div className="flex flex-1 items-center justify-center rounded-avid-md border border-dashed border-avid-border-strong">
-          <p className="text-xs text-avid-muted">Empty timeline — import media to begin (Phase 2+)</p>
-        </div>
+        <TimelineDock projectId={project.id} />
       </footer>
     </div>
   );

@@ -237,8 +237,27 @@ impl MediaEngine {
     }
 
     /// Probe a media file, returning structured metadata.
+    /// Input must be project-relative (traversal rejected).
     pub fn probe(&self, input: &Path) -> Result<MediaInfo, MediaError> {
         check_input_path(input)?;
+        self.probe_any(input)
+    }
+
+    /// Probe by explicit path (user-chosen import sources). The caller owns
+    /// validation — used for files outside the project before import copies
+    /// them in. Never called with AI-generated paths.
+    pub fn probe_file(&self, input: &Path) -> Result<MediaInfo, MediaError> {
+        if !input.is_file() {
+            return Err(MediaError::ProcessFailed {
+                op: "probe",
+                exit: "missing".to_owned(),
+                stderr: format!("no such file: {}", input.display()),
+            });
+        }
+        self.probe_any(input)
+    }
+
+    fn probe_any(&self, input: &Path) -> Result<MediaInfo, MediaError> {
         let output = Command::new(&self.ffprobe)
             .args([
                 "-v",
@@ -330,6 +349,41 @@ impl MediaEngine {
     #[must_use]
     pub fn mint_asset_id() -> String {
         Uuid::new_v4().to_string()
+    }
+
+    /// Run 16 kHz mono WAV extraction (Whisper input). Paths are explicit
+    /// (project dir + cache); the caller owns their validity.
+    pub fn extract_audio(&self, input: &Path, output: &Path) -> Result<(), MediaError> {
+        self.run_ffmpeg("extractAudio", &self.extract_audio_command(input, output))
+    }
+
+    /// Run a command previously built by one of the `*_command` builders.
+    /// `argv[0]` must be the ffmpeg binary; kept private so raw strings
+    /// never leak out of this crate (AGENTS §11).
+    fn run_ffmpeg(&self, op: &'static str, argv: &[String]) -> Result<(), MediaError> {
+        let (binary, args) = argv
+            .split_first()
+            .ok_or_else(|| MediaError::ProcessFailed {
+                op,
+                exit: "empty".to_owned(),
+                stderr: String::new(),
+            })?;
+        let output = Command::new(binary)
+            .args(args)
+            .output()
+            .map_err(|e| MediaError::BinaryUnavailable(e.to_string()))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(MediaError::ProcessFailed {
+                op,
+                exit: output
+                    .status
+                    .code()
+                    .map_or("signal".to_owned(), |c| c.to_string()),
+                stderr: truncate(&String::from_utf8_lossy(&output.stderr)),
+            })
+        }
     }
 }
 

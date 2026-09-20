@@ -110,8 +110,10 @@ version = "0.0.0"
 name = "avid-desktop"
 version = "0.1.0"
 dependencies = [
+ "avid-ai",
  "avid-media",
  "avid-project",
+ "avid-timeline",
  "serde",
  "serde_json",
  "tauri",

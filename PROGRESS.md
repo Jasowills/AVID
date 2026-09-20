@@ -32,22 +32,25 @@
 | 1.4 | Project creation dialog | ✅ | Validated form + backend `create_project` (manifest round-trips through its own parser); frontend persists to localStorage **interim** until Tauri save path lands |
 | 1.5 | Top bar (undo/redo/save/AI status/export) | ✅ | Renders per AGENTS §39; unwired controls **disabled with honest phase-titles** (no fake buttons, §136) |
 
-## Phase 2 — Media Foundation 🚧 (engine real, app integration pending)
+## Phase 2 — Media Foundation 🚧 (engine + import real, library/playback pending)
 
-- [x] MediaEngine abstraction: probe (REAL ffprobe test), command builders (proxy/extractAudio/extractFrame), progress-line parser, traversal guard — unit + ignored-live tests
+- [x] MediaEngine: probe (REAL), `probe_file`/`extract_audio` runners, builders, progress parser, traversal guard
+- [x] `import_media`: copy → probe → asset → auto-place first video on V1 (undoable) — LIVE-tested with fixture
+- [x] Media panel: probe form + import form wired to backend (14 desktop tests cover helpers)
 - [x] Fixture generator (`scripts/make-fixtures.sh`): talking-head, silence, vertical, corrupt
-- [ ] Import + media library UI (grid/list, search)
+- [ ] Media library grid/list + search + thumbnails UI
 - [ ] Playback via proxies + proxy offer flow
 - [ ] Background jobs + job center (cancel/retry/errors)
 - [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
-## Phase 3 — Timeline 🚧 (engine real, UI pending)
+## Phase 3 — Timeline ✅ (engine + working UI; trim/drag pending)
 
 - [x] Model: tracks/clips with all §13 fields, overlap validation, locked tracks
 - [x] Commands: Add/Remove/Trim/Move/Split with execute/undo/redo/serialize (18 tests, clippy pedantic, fmt)
 - [x] Grouped + transactional undo (`UndoStack`, manual groups, single-label AI undo)
-- [ ] Timeline UI (canvas renderer, zoom/scroll/snap/drag/shortcuts)
-- [ ] Autosave + crash recovery
+- [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved)
+- [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
+- [ ] Trim/drag interactions, zoom, snapping, shortcuts, markers
 
 ## Phase 4 — Rendering & Export 🚧 (graph + render real, export UI pending)
 
@@ -71,7 +74,8 @@
 - [x] In-app `whisper-rs` binding (`transcribe_wav`, 16 kHz mono gate, greedy deterministic) + REAL in-process test (synthesized speech → "kafka"+"partitions" in 5.5 s)
 - [x] Rerunnable sidecar verification (`scripts/verify-transcription.sh`): exact transcript + 14 ordered word-segments
 - [x] Transcript model + whisper-JSON parser + phrase→range mapping for text-based delete (7 tests, real output shape)
-- [ ] Transcript panel UI + VAD chunking + speaker labels + model auto-download UX
+- [x] Transcript panel UI wired to `transcribe_media` (segments, ranges, provider label)
+- [ ] VAD chunking + speaker labels + model auto-download UX
 
 ## Phase 6 — AI Runtime 🚧 (local real, cloud/config UI pending)
 
@@ -104,7 +108,7 @@
 
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
-- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + `save_project` to disk) · [ ] Media import · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
+- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
 - [x] FFmpeg rendering (graph + real render) · [ ] Export (dialog UI) · [x] Local transcription (in-app binding + real test) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [ ] AI rough-cut proposal

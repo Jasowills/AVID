@@ -89,6 +89,10 @@ pub struct ProjectManifest {
     pub timeline: serde_json::Value,
     /// Content-addressed media assets.
     pub assets: Vec<MediaAsset>,
+    /// Transcripts by asset id (opaque JSON owned by `avid-ai`; schema v1
+    /// files predate this field and load as empty via the default).
+    #[serde(default)]
+    pub transcripts: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl ProjectManifest {
@@ -126,7 +130,8 @@ fn migrate(manifest: ProjectManifest) -> ProjectManifest {
 }
 
 /// Reject absolute paths and `..` traversal (AGENTS §106).
-fn validate_relative_path(path: &str) -> Result<(), ProjectError> {
+/// Shared by the manifest validator and the backend's project-path resolver.
+pub fn validate_relative_path(path: &str) -> Result<(), ProjectError> {
     if path.is_empty() {
         return Err(ProjectError::PathTraversal("(empty path)".to_owned()));
     }
