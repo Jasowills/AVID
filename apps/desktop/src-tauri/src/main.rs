@@ -9,6 +9,7 @@
 mod commands;
 mod jobs;
 mod session;
+mod stream;
 
 /// Shared application state: schema handshake + the open project session.
 /// Every timeline/media mutation persists `project.json` (autosave), so
@@ -72,6 +73,9 @@ impl AppState {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .register_uri_scheme_protocol("stream", |ctx, request| {
+            crate::stream::handle_stream_request(ctx.app_handle(), request)
+        })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,

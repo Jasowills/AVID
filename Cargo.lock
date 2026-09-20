@@ -246,6 +246,7 @@ dependencies = [
  "avid-project",
  "avid-render",
  "avid-timeline",
+ "http",
  "serde",
  "serde_json",
  "tauri",
