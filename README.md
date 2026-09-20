@@ -1,152 +1,129 @@
-# AVID — AI Video Intelligence & Direction
+# AVID
 
-> A real, local-first, cross-platform AI video editor. Not a video generator. Not a chatbot. A genuine editor with an AI director, a deterministic visual engine, and a model-agnostic AI runtime.
+AVID (AI Video Intelligence & Direction) is a local-first, cross-platform AI video editor. It combines a real non-linear timeline with an AI director that understands your footage and operates an editable project — plus a deterministic visual engine that turns explanations into editable diagrams, code visuals, and callouts.
 
-**IMPORT → UNDERSTAND → EDIT → VISUALIZE → REVIEW → MODIFY → EXPORT**
+Desktop apps for macOS, Windows, and Linux (Tauri 2.x). The frontend owns interaction; Rust owns the media core.
 
-AI proposes. AVID structures. The user controls. The renderer executes.
+Works with the models you already have: Ollama, LM Studio-compatible and other OpenAI-compatible local endpoints, and (optionally) OpenAI, Anthropic, or Gemini. If it's running on your machine, AVID can use it — cloud is always explicit and opt-in.
 
----
+## "Wait, what are you selling me?"
 
-## What is AVID?
+Nothing. AVID is MIT-licensed and local-first. We built it because we wanted a video editor that understands technical content: you explain something, it creates the diagram — editable, at the right point in the timeline.
 
-AVID is a local-first desktop video editor (Tauri + React + Rust) that combines traditional non-linear editing with AI-assisted editing:
+We were inspired by existing solutions like Premiere's text-based editing, Descript's doc-as-timeline, Resolve's editing speed, and CapCut's one-click captions — but none of them combine a real NLE with local-first AI and editable AI-generated visuals.
 
-- **Real timeline** — video/audio/text/graphics/caption tracks, non-destructive, command-based with undo/redo.
-- **Local-first AI** — Ollama / OpenAI-compatible local endpoints / Whisper by default. Cloud providers (OpenAI, Anthropic, Gemini) are optional and explicit.
-- **Explain → Visualize** — AVID detects concepts in your transcript and creates *editable* diagrams, code visuals, callouts, and charts — not flattened AI images.
-- **AI-native editable timeline** — AI outputs clips, cuts, graphics, captions, and transitions. Everything stays editable.
-- **Bring Your Own Model** — provider adapters behind a capability interface. No provider-specific logic scattered through the app.
+We want something fast, offline-capable, private by default, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
 
-Target users: technical creators, YouTubers, educators, podcasters, and general creators. Initial wedge: **technical explainers** (diagrams, code highlights, architecture visuals).
+AI proposes. AVID structures. You control. The renderer executes.
 
-Full product/UX/architecture spec: [`AGENTS.MD`](./AGENTS.MD) (163 sections — the source of truth).
-Execution plan we strictly follow: [`PLAN.md`](./PLAN.md).
-Live build tracker: [`PROGRESS.md`](./PROGRESS.md).
-Phase roadmap: [`ROADMAP.md`](./ROADMAP.md).
+## Installation
 
----
+> [!WARNING]
+> AVID is very, very early. There are no releases yet and no runnable editor — Phase 0 (research + architecture) just completed. To run anything today you build from source, and what you get is the desktop shell (Phase 1, in progress).
+> You need Node.js 20+, a Rust stable toolchain, FFmpeg 6+ on PATH, and (optionally) Ollama for local AI.
 
-## Status
-
-> **Phase 0 — Scaffold.** Repository structure, docs, and plan are in place. No application code yet, by design (see `PLAN.md` / AGENTS §157). Do not expect a runnable editor from this commit.
-
-See `PROGRESS.md` for the phase checklist. Nothing is marked complete until it meets the Definition of Done (AGENTS §135).
-
----
-
-## Repository structure
-
-```text
-apps/desktop/          Tauri shell + React frontend (UI owns interaction)
-crates/
-  avid-core/           Shared kernel types, errors, IDs, events
-  avid-project/        Versioned project format, migrations, snapshots
-  avid-timeline/       Timeline model, commands, undo/redo
-  avid-media/          FFmpeg abstraction: probe, proxy, thumb, waveform
-  avid-render/         Timeline compiler → render graph → FFmpeg
-  avid-ai/             AI runtime, capability router, provider registry
-  avid-cli/            Future CLI (after core engine is stable)
-packages/
-  shared-types/        TS↔Rust shared contracts (source of truth for IPC)
-  ai-protocol/         Edit-plan + visual-scene JSON schemas + validators
-  ui/                  Shared React components (imports design-system only)
-  design-system/       Tokens, colors, typography, spacing (single source)
-  templates/           Template loader/validator (TS side)
-templates/             Data-driven editing templates (12 initial, see below)
-examples/              Shipped example projects (teach the product)
-docs/                  Architecture, research, ADRs, UX, testing, legal
-fixtures/              Deterministic test media/projects/AI eval prompts
-.opencode/agents/      Researcher, architect, frontend, rust, media, ai, …
-.opencode/commands/    /research, /plan, /test, /review, /security-review, …
-scripts/               Dev/verify/release scripts (no app logic here)
-tests/                 Cross-crate / E2E workflow tests
-```
-
-Clean-code rule: **frontend owns interaction, Rust owns native performance work.** No raw FFmpeg strings outside `avid-media`. No provider-specific logic outside `avid-ai` adapters. No AI mutation of state except via validated commands.
-
----
-
-## Quickstart (contributors)
-
-Prerequisites (Phase 0 — not all wired yet):
-
-- Node 20+, npm 10+
-- Rust stable (rustup), Tauri 2.x system deps
-- FFmpeg 6+ on PATH (scaffold only; engine lands in Phase 2/4)
-- Ollama (optional, for local AI phases)
+### Build from source
 
 ```bash
-# 1. Clone
 git clone https://github.com/Jasowills/AVID.git
 cd AVID
 
-# 2. Read the contract first (mandatory for collaborators)
-cat AGENTS.MD        # full spec
-cat PLAN.md          # strict execution plan
-cat PROGRESS.md      # what is actually done
-cat CONTRIBUTING.md  # clean-code + commit rules
-
-# 3. Verify scaffold integrity (no toolchain required)
+# No toolchain required: verifies repo structure + docs contract
 ./scripts/verify-scaffold.sh
 
-# 4. Per-phase dev commands live in DEVELOPMENT.md
-cat DEVELOPMENT.md
+# Frontend (desktop shell UI, runs in the browser until Tauri is wired)
+npm install
+npm run dev --workspace=@avid/desktop
 ```
 
-> Rust/Node workspaces exist as manifests only in this scaffold commit. `npm install`, `cargo build`, and `tauri dev` will be wired in Phase 1 with pinned versions and CI.
+Rust workspace commands (require the toolchain from `rust-toolchain.toml`):
 
----
+```bash
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+```
 
-## Principles (non-negotiable)
+Read [DEVELOPMENT.md](./DEVELOPMENT.md) for the full toolchain setup and troubleshooting.
 
-1. **Local-first.** Works offline for basic editing. Cloud AI is opt-in, per-operation, with visible processing labels (`Local` vs `Cloud: Provider`).
-2. **Non-destructive.** Original media is never modified. Edits are commands against sources.
-3. **Command-based editing.** Every edit (human or AI) is a serializable command with `execute / undo / redo`. AI output is validated against schemas before it touches the timeline.
-4. **Deterministic visuals first.** Diagrams/code/charts are structured, editable scene specs — not generated images.
-5. **User control.** Large AI changes require Preview → Review → Apply/Cancel, per-operation accept/reject, and grouped undo.
-6. **No fake completion.** A feature is done only when it meets AGENTS §135 (tests, errors, empty/loading states, undo, persistence, a11y, perf, docs, recovery, manual verification).
-7. **Privacy.** Never secretly send media to cloud. Never log keys, tokens, or private transcripts. No invasive telemetry by default.
+### Desktop app
 
----
+No packaged builds yet. Planned artifacts once Phase 1–10 land:
 
-## Templates (planned initial set)
-
-`technical-explainer`, `youtube-talking-head`, `podcast`, `podcast-short`, `educational-lesson`, `product-demo`, `documentary`, `social-short`, `code-tutorial`, `architecture-breakdown`, `product-launch`, `minimal-caption-video`.
-
-Templates encode *editing behavior*, not just visuals. Format: `template.json + preview + assets/ + scenes/ + rules/`.
-
----
-
-## Documentation map
-
-| Doc | Purpose |
+| OS | Packages |
 |---|---|
-| `AGENTS.MD` | Master spec (§0–§163), source of truth |
-| `PLAN.md` | Strict phased plan + gates (we do not skip phases) |
-| `PROGRESS.md` | Living tracker — phase status, no lost features |
-| `ROADMAP.md` | MVP phases 0–10 + post-MVP |
-| `CONTRIBUTING.md` | Clean-code, branching, commits, PRs |
-| `DEVELOPMENT.md` | Toolchain, commands, troubleshooting |
-| `docs/ARCHITECTURE.md` | System boundaries (scaffold stub → Phase 0 fills) |
-| `docs/decisions/` | ADRs (ADR-001…ADR-008 planned) |
-| `docs/LEGAL_AND_LICENSING.md` | Dependency/license tracking |
-| `docs/research/` | Competitive + technical research (3 options per subsystem) |
+| macOS | `.dmg` |
+| Windows | `.exe` / installer |
+| Linux | `.AppImage`, `.deb` |
 
----
+### Local AI (optional, for Phase 6+)
 
-## Security
+```bash
+# Default local provider — any recent Ollama build
+ollama pull qwen3:8b
+```
 
-Threat model: malicious media, malicious project files, malicious AI output, third-party assets, credential leakage. Rules: never execute AI-generated shell, validate/normalize all paths (reject traversal), sandbox FFmpeg where practical, never expose secrets to frontend logs. See AGENTS §105–§107 and `docs/SECURITY.md` (Phase 0).
+Cloud providers stay disabled until you add a key in Settings → AI Providers, per operation, with the processing label shown (`Local` vs `Cloud: Provider`).
 
----
+## Some notes
 
-## License
+We are very very early in this project. Expect missing features, not just bugs — see [PROGRESS.md](./PROGRESS.md) for what's actually done (nothing is marked complete without tests, docs, undo, and error handling).
 
-MIT — see [`LICENSE`](./LICENSE). Codec/font/model/template licensing is tracked separately in `docs/LEGAL_AND_LICENSING.md` before any integration.
+We welcome collaborators: read [PLAN.md](./PLAN.md) for the strict phase order, then pick up the current phase in [PROGRESS.md](./PROGRESS.md). Small fixes and docs improvements are always fair game; big features follow the plan so the foundation stays solid.
 
----
+## Documentation
 
-## Contributing
+Full docs live in [docs/](./docs). There's no docs site yet. Start here:
 
-We welcome collaborators. Start with `CONTRIBUTING.md`, then `PLAN.md` + `PROGRESS.md` to find the current phase. Small coherent commits only (`feat(timeline): …`). No large unrelated commits. No mocked functionality marked as done.
+- [PLAN.md](./PLAN.md) — the strict execution plan we follow in order
+- [PROGRESS.md](./PROGRESS.md) — living tracker of what's actually done
+- [ROADMAP.md](./ROADMAP.md) — MVP phases 0–10 + post-MVP
+- [Architecture proposal](./docs/ARCHITECTURE.md)
+- Research: [editors](./docs/research/editors-comparison.md) · [Tauri + IPC](./docs/research/tauri.md) · [FFmpeg](./docs/research/ffmpeg.md) · [Whisper](./docs/research/whisper.md) · [local AI](./docs/research/local-ai.md) · [timeline](./docs/research/timeline.md)
+- Decisions: [ADR-001 Tauri](./docs/decisions/ADR-001-tauri.md) · [ADR-002 media core](./docs/decisions/ADR-002-rust-media-core.md) · [ADR-003 project format](./docs/decisions/ADR-003-project-format.md) · [ADR-004 timeline](./docs/decisions/ADR-004-timeline-model.md) · [ADR-005 AI abstraction](./docs/decisions/ADR-005-ai-provider-abstraction.md) · [ADR-006 rendering](./docs/decisions/ADR-006-rendering-architecture.md) · [ADR-007 local-first AI](./docs/decisions/ADR-007-local-first-ai.md) · [ADR-008 command safety](./docs/decisions/ADR-008-command-based-editing.md)
+- [UX flows](./docs/ux/flows.md)
+- [Legal & licensing register](./docs/LEGAL_AND_LICENSING.md)
+
+The full product spec is [AGENTS.md](./AGENTS.md) (163 sections — the source of truth).
+
+## If you want to contribute, read this first
+
+### Install the toolchains
+
+#### macOS
+
+```bash
+# Node 20+ (check .nvmrc)
+nvm install && nvm use
+# Rust stable (see rust-toolchain.toml)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# FFmpeg 6+
+brew install ffmpeg
+# Optional: local AI
+brew install ollama
+```
+
+#### Linux
+
+```bash
+# Node 20+, Rust (rustup), FFmpeg 6+ via your package manager,
+# plus Tauri system deps (webkit2gtk etc. — see DEVELOPMENT.md)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+#### Windows
+
+```powershell
+# Node 20+ (nvm-windows), Rust via rustup-init.exe,
+# MSVC C++ build tools + WebView2 — see DEVELOPMENT.md
+```
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+Verify the tree with `./scripts/verify-scaffold.sh`, then read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR — clean-code boundaries, small coherent commits, and the Definition of Done apply to everything.
+
+Have a feature request? Open an [issue](https://github.com/Jasowills/AVID/issues) with the pain point and the workflow it would unblock.
