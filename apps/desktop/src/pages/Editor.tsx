@@ -7,6 +7,7 @@ import { ExportDialog } from "../components/ExportDialog";
 import { InspectorPanel } from "../components/InspectorPanel";
 import { JobsPanel } from "../components/JobsPanel";
 import { MediaPanel } from "../components/MediaPanel";
+import { PreviewPane } from "../components/PreviewPane";
 import { isTauri } from "../lib/ipc";
 import { TimelineDock } from "../components/TimelineDock";
 import { TopBar } from "../components/TopBar";
@@ -102,16 +103,8 @@ export function Editor() {
         </aside>
 
         <section className="flex min-h-0 flex-col bg-avid-base" aria-label="Preview">
-          <div className="flex flex-1 items-center justify-center p-4">
-            <div
-              className="flex aspect-video w-full max-w-3xl items-center justify-center rounded-avid-lg border border-avid-border bg-avid-panel"
-              role="img"
-              aria-label="Video preview (lands in Phase 2 with proxy playback)"
-            >
-              <p className="text-sm text-avid-muted">
-                Preview — {project.canvas} · {project.frameRate}fps · {project.resolution}
-              </p>
-            </div>
+          <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+            <PreviewPane clipId={selectedId} />
           </div>
         </section>
 

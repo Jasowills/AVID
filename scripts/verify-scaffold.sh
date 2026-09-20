@@ -26,6 +26,7 @@ required_files=(
   "apps/desktop/src/components/TimelineDock.tsx" "apps/desktop/src/components/timelineLayout.ts"
   "apps/desktop/src/components/ExportDialog.tsx" "apps/desktop/src/components/JobsPanel.tsx"
   "apps/desktop/src/components/ProvidersPanel.tsx" "apps/desktop/src/components/InspectorPanel.tsx"
+  "apps/desktop/src/components/PreviewPane.tsx" "apps/desktop/src/preview.test.ts"
   "apps/desktop/src/stores/useJobsStore.ts" "apps/desktop/src/ai-jobs.test.ts"
   "apps/desktop/src-tauri/src/session.rs" "apps/desktop/src-tauri/src/jobs.rs"
   "apps/desktop/src/timeline-ui.test.ts" "apps/desktop/src-tauri/src/session.rs" "apps/desktop/src/pages/Home.tsx"

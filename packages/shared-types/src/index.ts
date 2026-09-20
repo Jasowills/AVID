@@ -214,6 +214,7 @@ export interface MediaAsset {
   duration: number | null;
   dimensions: [number, number] | null;
   hash: string | null;
+  proxy_path: string | null;
 }
 
 /** Proposed cut confidence (honest buckets, never fake precision). */

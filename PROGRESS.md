@@ -39,9 +39,11 @@
 - [x] Media panel: probe form + import form wired to backend (14 desktop tests cover helpers)
 - [x] Job system: registry (start/progress/finish/fail/cancel/list) + Channel progress events + `cancel_job`; render streams real ffmpeg fractions, transcribe registers indeterminate jobs
 - [x] Job center UI: Jobs tab (progress bars, cancel, failure reasons) + top-bar running pill (shared polling store)
+- [x] Proxy generation: 540p transcode command + session recording + LIVE test (smaller file, video present); audio-only fails closed with guidance
+- [x] Seekable preview: `stream://` Range protocol (200/206/416, traversal guard, symlink containment, MIME map) — pure core unit-tested (5 tests); Tauri handler wired
+- [x] Preview pane: plays selected clip (proxy preferred, original fallback) via `<video>` + stream URL; honest browser/empty/missing states
 - [x] Fixture generator (`scripts/make-fixtures.sh`): talking-head, silence, vertical, corrupt
 - [ ] Media library grid/list + search + thumbnails UI
-- [ ] Playback via proxies + proxy offer flow
 - [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
 ## Phase 3 — Timeline ✅ (engine + working UI; trim/drag pending)
@@ -109,7 +111,7 @@
 
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
-- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
+- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (proxy + seekable stream + pane)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
 - [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [x] One cloud provider (shape + auth + probe; live call needs a key) · [x] AI rough-cut proposal (detectors + proposal + review + apply)
