@@ -30,6 +30,9 @@ pub enum RenderError {
         /// Captured stderr (truncated).
         stderr: String,
     },
+    /// Export request invalid (unknown preset, bad filename, …).
+    #[error("invalid export request: {0}")]
+    InvalidExport(String),
     /// The graph has burned-in text overlays but this ffmpeg build has no
     /// text filters (`drawtext`/`subtitles`). System builds (e.g. Homebrew
     /// without libfreetype/libass) often lack them — use a full build or the
@@ -51,6 +54,7 @@ impl RenderError {
             Self::InvalidOverlay(_) => "AVID_RENDER_003",
             Self::ProcessFailed { .. } => "AVID_RENDER_004",
             Self::TextOverlaysUnsupported { .. } => "AVID_RENDER_005",
+            Self::InvalidExport(_) => "AVID_RENDER_006",
         }
     }
 }
@@ -255,6 +259,181 @@ pub fn ffmpeg_supports_text(ffmpeg: &Path) -> bool {
     })
 }
 
+/// Lower with automatic text-filter fallback: full [`RenderGraph::argv`]
+/// when the ffmpeg offers text filters, [`RenderGraph::argv_compat`]
+/// otherwise (empty overlays lower identically either way; present overlays
+/// on incapable builds fail loudly via `AVID_RENDER_005`).
+pub fn argv_auto(
+    ffmpeg: &Path,
+    output: &Path,
+    graph: &RenderGraph,
+) -> Result<Vec<String>, RenderError> {
+    if ffmpeg_supports_text(ffmpeg) {
+        graph.argv(ffmpeg, output)
+    } else {
+        graph.argv_compat(ffmpeg, output)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Export presets + timeline compilation (Phase 4 export path)
+// ---------------------------------------------------------------------------
+
+/// A named export target (resolution + frame rate; codec is H.264/AAC).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExportPreset {
+    /// Stable id for IPC (`"youtube-1080p"`, `"custom"`).
+    pub id: &'static str,
+    /// UI label.
+    pub label: &'static str,
+    /// Output width; height follows the source aspect (`scale=W:-2`).
+    /// Smart reframing (crop/recompose) is post-MVP — presets never claim it.
+    pub width: u32,
+    /// Output frame rate.
+    pub fps: u32,
+}
+
+/// Shipped presets. `custom` is resolved from explicit width/fps.
+pub const EXPORT_PRESETS: &[ExportPreset] = &[
+    ExportPreset {
+        id: "youtube-1080p",
+        label: "YouTube 1080p",
+        width: 1920,
+        fps: 30,
+    },
+    ExportPreset {
+        id: "youtube-4k",
+        label: "YouTube 4K",
+        width: 3840,
+        fps: 30,
+    },
+    ExportPreset {
+        id: "short-1080p",
+        label: "Short / Reel 1080p",
+        width: 1080,
+        fps: 30,
+    },
+    ExportPreset {
+        id: "custom",
+        label: "Custom",
+        width: 1920,
+        fps: 30,
+    },
+];
+
+const ALLOWED_FPS: &[u32] = &[24, 25, 30, 50, 60];
+
+/// Resolve a preset id (+ optional custom width/fps) to `(width, fps)`.
+pub fn resolve_preset(
+    preset_id: &str,
+    custom_width: Option<u32>,
+    custom_fps: Option<u32>,
+) -> Result<(u32, u32), RenderError> {
+    if preset_id == "custom" {
+        let (Some(width), Some(fps)) = (custom_width, custom_fps) else {
+            return Err(RenderError::InvalidExport(
+                "custom preset needs an explicit width and frame rate".to_owned(),
+            ));
+        };
+        check_dimensions(width, fps)?;
+        return Ok((width, fps));
+    }
+    EXPORT_PRESETS
+        .iter()
+        .find(|preset| preset.id == preset_id)
+        .map(|preset| (preset.width, preset.fps))
+        .ok_or_else(|| RenderError::InvalidExport(format!("unknown preset: {preset_id}")))
+}
+
+fn check_dimensions(width: u32, fps: u32) -> Result<(), RenderError> {
+    if !(240..=7680).contains(&width) {
+        return Err(RenderError::InvalidExport(format!(
+            "width out of range: {width}"
+        )));
+    }
+    if !ALLOWED_FPS.contains(&fps) {
+        return Err(RenderError::InvalidExport(format!(
+            "unsupported frame rate: {fps}"
+        )));
+    }
+    Ok(())
+}
+
+/// Validate an export filename: bare name, `.mp4` suffix, no traversal.
+/// The file always lands in the project's `exports/` directory.
+pub fn validate_export_filename(name: &str) -> Result<(), RenderError> {
+    if name.is_empty() || name.len() > 120 {
+        return Err(RenderError::InvalidExport(
+            "export name must be 1–120 characters".to_owned(),
+        ));
+    }
+    if !name.to_lowercase().ends_with(".mp4") {
+        return Err(RenderError::InvalidExport(
+            "export name must end in .mp4".to_owned(),
+        ));
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") || name.starts_with('.') {
+        return Err(RenderError::InvalidExport(
+            "export name must be a bare file name".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Compile video-track clips (ordered by start) into a [`RenderGraph`].
+/// `asset_path` resolves a clip's `source_media_id` to a project file;
+/// `None` means the timeline references unknown media and fails loudly.
+///
+/// Limitation (documented, next): every segment is expected to carry audio
+/// (camera/screen recordings do). Mixed audio-less timelines fail at the
+/// concat filter with `AVID_RENDER_004`, not silently.
+pub fn graph_from_timeline(
+    timeline: &avid_timeline::Timeline,
+    asset_path: &dyn Fn(&str) -> Option<PathBuf>,
+    width: u32,
+    fps: u32,
+) -> Result<RenderGraph, RenderError> {
+    check_dimensions(width, fps)?;
+    let video_tracks: Vec<&str> = timeline
+        .tracks
+        .iter()
+        .filter(|track| track.kind == avid_timeline::TrackKind::Video)
+        .map(|track| track.id.as_str())
+        .collect();
+    let mut clips: Vec<&avid_timeline::Clip> = timeline
+        .clips
+        .values()
+        .filter(|clip| video_tracks.contains(&clip.track_id.as_str()))
+        .collect();
+    clips.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut segments = vec![];
+    for clip in clips {
+        let Some(path) = asset_path(&clip.source_media_id) else {
+            return Err(RenderError::InvalidSegment(format!(
+                "unknown media for clip {}",
+                clip.id
+            )));
+        };
+        segments.push(Segment {
+            path,
+            seek: clip.in_point,
+            duration: clip.duration,
+        });
+    }
+    let graph = RenderGraph {
+        segments,
+        overlays: vec![],
+        width,
+        fps,
+    };
+    graph.validate()?;
+    Ok(graph)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,6 +509,83 @@ mod tests {
     #[test]
     fn total_duration_sums_segments() {
         assert_eq!(graph().total_duration(), 5.0);
+    }
+
+    #[test]
+    fn presets_resolve_including_custom() {
+        assert_eq!(
+            resolve_preset("youtube-1080p", None, None).unwrap(),
+            (1920, 30)
+        );
+        assert_eq!(
+            resolve_preset("short-1080p", None, None).unwrap(),
+            (1080, 30)
+        );
+        assert_eq!(
+            resolve_preset("custom", Some(1280), Some(25)).unwrap(),
+            (1280, 25)
+        );
+        assert!(resolve_preset("nope", None, None).is_err());
+        assert!(resolve_preset("custom", None, Some(30)).is_err());
+        assert!(resolve_preset("custom", Some(100), Some(30)).is_err());
+        assert!(resolve_preset("custom", Some(1280), Some(48)).is_err());
+    }
+
+    #[test]
+    fn export_filenames_are_bare_mp4_names() {
+        assert!(validate_export_filename("final.mp4").is_ok());
+        for bad in [
+            "",
+            "x".repeat(121).as_str(),
+            "final.mov",
+            "a/b.mp4",
+            "..\\x.mp4",
+            "../x.mp4",
+            ".hidden.mp4",
+        ] {
+            assert!(validate_export_filename(bad).is_err(), "name: {bad}");
+        }
+    }
+
+    #[test]
+    fn graph_from_timeline_orders_video_clips_and_resolves_media() {
+        use avid_timeline::{Clip, Timeline, Track, TrackKind};
+        let mut timeline = Timeline::default();
+        timeline.tracks.push(Track {
+            id: "v1".to_owned(),
+            kind: TrackKind::Video,
+            index: 0,
+            name: "V1".to_owned(),
+            locked: false,
+            muted: false,
+        });
+        let mk = |id: &str, start: f64| Clip {
+            id: id.to_owned(),
+            source_media_id: "m1".to_owned(),
+            track_id: "v1".to_owned(),
+            start,
+            duration: 2.0,
+            in_point: start,
+            name: id.to_owned(),
+        };
+        // Insert out of order; graph must sort by start.
+        timeline.insert_clip(mk("b", 4.0)).unwrap();
+        timeline.insert_clip(mk("a", 0.0)).unwrap();
+        let graph =
+            graph_from_timeline(&timeline, &|_| Some(PathBuf::from("m.mp4")), 1280, 30).unwrap();
+        assert_eq!(graph.segments.len(), 2);
+        assert_eq!((graph.segments[0].seek, graph.segments[1].seek), (0.0, 4.0));
+        assert_eq!(graph.total_duration(), 4.0);
+
+        let missing = graph_from_timeline(&timeline, &|_| None, 1280, 30).unwrap_err();
+        assert!(matches!(missing, RenderError::InvalidSegment(_)));
+
+        let mut empty = Timeline::default();
+        empty.tracks = timeline.tracks.clone();
+        assert!(matches!(
+            graph_from_timeline(&empty, &|_| Some(PathBuf::from("m.mp4")), 1280, 30),
+            Err(RenderError::Empty)
+        ));
     }
 
     #[test]

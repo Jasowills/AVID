@@ -351,6 +351,17 @@ impl MediaEngine {
         Uuid::new_v4().to_string()
     }
 
+    /// Path of the ffmpeg binary (for capability probes).
+    #[must_use]
+    pub fn ffmpeg_path(&self) -> &Path {
+        &self.ffmpeg
+    }
+
+    /// Run a lowered render graph (`argv[0]` = ffmpeg binary).
+    pub fn run_render(&self, argv: &[String]) -> Result<(), MediaError> {
+        self.run_ffmpeg("render", argv)
+    }
+
     /// Run 16 kHz mono WAV extraction (Whisper input). Paths are explicit
     /// (project dir + cache); the caller owns their validity.
     pub fn extract_audio(&self, input: &Path, output: &Path) -> Result<(), MediaError> {

@@ -131,6 +131,39 @@ pub mod whisper;
 pub use transcript::{Segment as TranscriptSegment, Transcript, Word as TranscriptWord};
 pub use whisper::{transcribe_wav, TranscribeError};
 
+/// Default speech model (verified: `scripts/verify-transcription.sh`).
+pub const DEFAULT_SPEECH_MODEL_URL: &str =
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin";
+/// Expected filename of the default speech model.
+pub const DEFAULT_SPEECH_MODEL_FILE: &str = "ggml-tiny.en.bin";
+
+/// Download a speech model to `dest` (creates parent dirs). Blocking — call
+/// from a background thread / `spawn_blocking`. Returns bytes written.
+/// Progress reporting lands with the job center (Phase 2+).
+pub fn download_speech_model(url: &str, dest: &std::path::Path) -> Result<u64, AiError> {
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| AiError::Transport(e.to_string()))?;
+    }
+    let agent = UreqTransport::new().agent;
+    let mut response = agent
+        .get(url)
+        .call()
+        .map_err(|e| AiError::Transport(e.to_string()))?;
+    if !(200..300).contains(&response.status().as_u16()) {
+        return Err(AiError::Provider {
+            status: response.status().as_u16().to_string(),
+            body: format!("model download failed: {url}"),
+        });
+    }
+    let mut file = std::fs::File::create(dest).map_err(|e| AiError::Transport(e.to_string()))?;
+    let bytes = response
+        .body_mut()
+        .read_to_vec()
+        .map_err(|e| AiError::Transport(e.to_string()))?;
+    std::io::Write::write_all(&mut file, &bytes).map_err(|e| AiError::Transport(e.to_string()))?;
+    Ok(bytes.len() as u64)
+}
+
 /// Minimal HTTP transport (mockable in tests).
 pub trait HttpTransport {
     /// POST a JSON body; return `(status_code, body)`.
@@ -139,7 +172,7 @@ pub trait HttpTransport {
 
 /// `ureq`-backed transport for production use.
 pub struct UreqTransport {
-    agent: ureq::Agent,
+    pub(crate) agent: ureq::Agent,
 }
 
 impl UreqTransport {
@@ -383,6 +416,16 @@ mod tests {
         transport.queue("/v1/chat/completions", Ok((200, chat_envelope("not json"))));
         let adapter = OpenAiCompatAdapter::new(transport, "http://x", "m");
         assert!(!adapter.probe_structured_output().unwrap());
+    }
+
+    #[test]
+    fn model_download_fails_cleanly_on_bad_url() {
+        let dir = std::env::temp_dir().join("avid-download-test");
+        let err = download_speech_model("http://127.0.0.1:1/nope.bin", &dir.join("model.bin"))
+            .unwrap_err();
+        assert!(matches!(err, AiError::Transport(_)));
+        assert_eq!(err.code(), "AVID_AI_001");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// LIVE eval: structured-output probe against local Ollama (`qwen2.5:7b`).
