@@ -168,7 +168,10 @@ fn check_input_path(path: &Path) -> Result<(), MediaError> {
     if path.is_absolute() {
         return Err(MediaError::UnsafePath(path.display().to_string()));
     }
-    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return Err(MediaError::UnsafePath(path.display().to_string()));
     }
     Ok(())
@@ -216,10 +219,21 @@ impl MediaEngine {
         fn find(name: &str) -> Result<PathBuf, MediaError> {
             let path = PathBuf::from(name);
             // Probe executability with `--version`; PATH lookup happens in the child.
-            let ok = Command::new(&path).arg("-version").output().map(|o| o.status.success()).unwrap_or(false);
-            if ok { Ok(path) } else { Err(MediaError::BinaryUnavailable(name.to_owned())) }
+            let ok = Command::new(&path)
+                .arg("-version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if ok {
+                Ok(path)
+            } else {
+                Err(MediaError::BinaryUnavailable(name.to_owned()))
+            }
         }
-        Ok(Self { ffmpeg: find("ffmpeg")?, ffprobe: find("ffprobe")? })
+        Ok(Self {
+            ffmpeg: find("ffmpeg")?,
+            ffprobe: find("ffprobe")?,
+        })
     }
 
     /// Probe a media file, returning structured metadata.
@@ -240,7 +254,10 @@ impl MediaEngine {
         if !output.status.success() {
             return Err(MediaError::ProcessFailed {
                 op: "probe",
-                exit: output.status.code().map_or("signal".to_owned(), |c| c.to_string()),
+                exit: output
+                    .status
+                    .code()
+                    .map_or("signal".to_owned(), |c| c.to_string()),
                 stderr: truncate(&String::from_utf8_lossy(&output.stderr)),
             });
         }
@@ -347,14 +364,20 @@ mod tests {
         assert_eq!(info.size, Some(1_234_567));
         assert_eq!(info.streams.len(), 2);
         let video = info.video_stream().unwrap();
-        assert_eq!((video.codec_name.as_str(), video.width, video.height), ("h264", Some(1280), Some(720)));
+        assert_eq!(
+            (video.codec_name.as_str(), video.width, video.height),
+            ("h264", Some(1280), Some(720))
+        );
         let audio = info.audio_stream().unwrap();
         assert_eq!((audio.sample_rate, audio.channels), (Some(48000), Some(2)));
     }
 
     #[test]
     fn rejects_malformed_probe_output() {
-        assert!(matches!(parse_probe_output("{nope"), Err(MediaError::Parse(_))));
+        assert!(matches!(
+            parse_probe_output("{nope"),
+            Err(MediaError::Parse(_))
+        ));
     }
 
     #[test]
@@ -382,7 +405,10 @@ mod tests {
 
     #[test]
     fn command_builders_emit_expected_filters() {
-        let engine = MediaEngine { ffmpeg: PathBuf::from("ffmpeg"), ffprobe: PathBuf::from("ffprobe") };
+        let engine = MediaEngine {
+            ffmpeg: PathBuf::from("ffmpeg"),
+            ffprobe: PathBuf::from("ffprobe"),
+        };
         let proxy = engine.proxy_command(Path::new("in.mp4"), Path::new("proxy.mp4"));
         assert!(proxy.contains(&"scale=-2:540".to_owned()));
         assert!(proxy.contains(&"+faststart".to_owned()));
@@ -399,8 +425,8 @@ mod tests {
     #[test]
     #[ignore]
     fn probes_real_fixture_with_system_ffmpeg() {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/media/talkinghead_10s.mp4");
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/media/talkinghead_10s.mp4");
         if !fixture.is_file() {
             return;
         }
