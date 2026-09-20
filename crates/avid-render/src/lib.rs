@@ -580,8 +580,10 @@ mod tests {
         let missing = graph_from_timeline(&timeline, &|_| None, 1280, 30).unwrap_err();
         assert!(matches!(missing, RenderError::InvalidSegment(_)));
 
-        let mut empty = Timeline::default();
-        empty.tracks = timeline.tracks.clone();
+        let empty = Timeline {
+            tracks: timeline.tracks.clone(),
+            ..Timeline::default()
+        };
         assert!(matches!(
             graph_from_timeline(&empty, &|_| Some(PathBuf::from("m.mp4")), 1280, 30),
             Err(RenderError::Empty)
