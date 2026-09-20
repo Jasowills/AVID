@@ -141,6 +141,44 @@ impl Session {
         self.persist()
     }
 
+    /// Execute several commands as one undo step (transactional: the group
+    /// rolls back on failure) and persist. AI operations run here (ADR-008).
+    pub fn mutate_group(
+        &mut self,
+        label: &str,
+        commands: Vec<Box<dyn EditCommand>>,
+    ) -> Result<(), CommandError> {
+        self.undo
+            .execute_group(&mut self.timeline, label, commands)
+            .map_err(|e| CommandError {
+                code: e.code().to_owned(),
+                message: e.to_string(),
+            })?;
+        self.persist()
+    }
+
+    /// Ensure a caption track exists (additive setup step for caption ops).
+    pub fn ensure_caption_track(&mut self) -> Result<(), CommandError> {
+        if self
+            .timeline
+            .tracks
+            .iter()
+            .any(|track| track.id == "captions")
+        {
+            return Ok(());
+        }
+        let index = self.timeline.tracks.len() as u32;
+        self.timeline.tracks.push(Track {
+            id: "captions".to_owned(),
+            kind: TrackKind::Caption,
+            index,
+            name: "Captions".to_owned(),
+            locked: false,
+            muted: false,
+        });
+        self.persist()
+    }
+
     /// Add a clip (undoable, persisted).
     pub fn add_clip(&mut self, clip: Clip) -> Result<(), CommandError> {
         self.mutate("Add clip", Box::new(AddClipCommand { clip }))
@@ -270,6 +308,23 @@ impl Session {
                 code: "AVID_MEDIA_001".to_owned(),
                 message: "Unknown media asset.".to_owned(),
             })?;
+        let dir = self.dir.clone();
+        let transcript =
+            Self::transcribe_snapshot(engine, model_path, cache_dir, &dir, &asset, language)?;
+        self.store_transcript(asset_id, transcript.clone())?;
+        Ok(transcript)
+    }
+
+    /// Run extraction + inference without touching session state, so async
+    /// commands can execute it on a blocking thread. Pure over a snapshot.
+    pub fn transcribe_snapshot(
+        engine: &MediaEngine,
+        model_path: &Path,
+        cache_dir: &Path,
+        dir: &Path,
+        asset: &MediaAsset,
+        language: &str,
+    ) -> Result<Transcript, CommandError> {
         if !model_path.is_file() {
             return Err(CommandError {
                 code: "AVID_TRANSCRIBE_001".to_owned(),
@@ -282,16 +337,25 @@ impl Session {
             code: "AVID_PROJECT_001".to_owned(),
             message: format!("AVID couldn't prepare the audio cache: {e}"),
         })?;
-        let wav = cache_dir.join(format!("{asset_id}.wav"));
-        let source = self.dir.join(&asset.relative_path);
+        let wav = cache_dir.join(format!("{}.wav", asset.id));
+        let source = dir.join(&asset.relative_path);
         engine
             .extract_audio(&source, &wav)
             .map_err(|error| command_error_from_media(&error))?;
-        let transcript = avid_ai::transcribe_wav(model_path, &wav, language, TRANSCRIPT_PROVIDER)
-            .map_err(|e| CommandError {
-            code: e.code().to_owned(),
-            message: e.to_string(),
-        })?;
+        avid_ai::transcribe_wav(model_path, &wav, language, TRANSCRIPT_PROVIDER).map_err(|e| {
+            CommandError {
+                code: e.code().to_owned(),
+                message: e.to_string(),
+            }
+        })
+    }
+
+    /// Store a transcript on the manifest and persist.
+    pub fn store_transcript(
+        &mut self,
+        asset_id: &str,
+        transcript: Transcript,
+    ) -> Result<(), CommandError> {
         self.manifest.transcripts.insert(
             asset_id.to_owned(),
             serde_json::to_value(&transcript).map_err(|e| CommandError {
@@ -299,8 +363,7 @@ impl Session {
                 message: format!("AVID couldn't store the transcript: {e}"),
             })?,
         );
-        self.persist()?;
-        Ok(transcript)
+        self.persist()
     }
 
     /// Stored transcript for an asset, if transcribed.
@@ -328,17 +391,18 @@ impl Session {
         dir: &Path,
         timeline: &avid_timeline::Timeline,
         assets: &[MediaAsset],
-        preset_id: &str,
-        custom_width: Option<u32>,
-        custom_fps: Option<u32>,
-        filename: &str,
+        request: &ExportRequest,
+        cancel: &std::sync::atomic::AtomicBool,
+        on_progress: &dyn Fn(f64),
     ) -> Result<ExportResult, CommandError> {
         use avid_render::{
             argv_auto, graph_from_timeline, resolve_preset, validate_export_filename,
         };
-        validate_export_filename(filename).map_err(|error| command_error_from_render(&error))?;
-        let (width, fps) = resolve_preset(preset_id, custom_width, custom_fps)
+        validate_export_filename(&request.filename)
             .map_err(|error| command_error_from_render(&error))?;
+        let (width, fps) =
+            resolve_preset(&request.preset_id, request.custom_width, request.custom_fps)
+                .map_err(|error| command_error_from_render(&error))?;
         let graph = graph_from_timeline(
             timeline,
             &|media_id| {
@@ -356,11 +420,11 @@ impl Session {
             code: "AVID_RENDER_004".to_owned(),
             message: format!("AVID couldn't prepare the exports folder: {e}"),
         })?;
-        let output = exports.join(filename);
+        let output = exports.join(&request.filename);
         let argv = argv_auto(engine.ffmpeg_path(), &output, &graph)
             .map_err(|error| command_error_from_render(&error))?;
         engine
-            .run_render(&argv)
+            .run_render_with_progress(&argv, graph.total_duration(), cancel, on_progress)
             .map_err(|error| command_error_from_media(&error))?;
         let info = engine
             .probe_file(&output)
@@ -380,7 +444,7 @@ impl Session {
             });
         }
         Ok(ExportResult {
-            relative_path: format!("exports/{filename}"),
+            relative_path: format!("exports/{}", request.filename),
             absolute_path: output.display().to_string(),
             duration,
             width,
@@ -392,22 +456,34 @@ impl Session {
     pub fn export(
         &mut self,
         engine: &MediaEngine,
-        preset_id: &str,
-        custom_width: Option<u32>,
-        custom_fps: Option<u32>,
-        filename: &str,
+        request: &ExportRequest,
+        cancel: &std::sync::atomic::AtomicBool,
+        on_progress: &dyn Fn(f64),
     ) -> Result<ExportResult, CommandError> {
         Self::export_snapshot(
             engine,
             &self.dir.clone(),
             &self.timeline.clone(),
             &self.manifest.assets.clone(),
-            preset_id,
-            custom_width,
-            custom_fps,
-            filename,
+            request,
+            cancel,
+            on_progress,
         )
     }
+}
+
+/// Export request (mirrors `@avid/shared-types` `ExportRequest` for IPC).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportRequest {
+    /// Preset id (`youtube-1080p`, …, `custom`).
+    pub preset_id: String,
+    /// Required when `preset_id` is `custom`.
+    pub custom_width: Option<u32>,
+    /// Required when `preset_id` is `custom`.
+    pub custom_fps: Option<u32>,
+    /// Bare `.mp4` file name.
+    pub filename: String,
 }
 
 /// Verified export result (returned to the UI + tests).
@@ -502,6 +578,19 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    fn flag() -> std::sync::atomic::AtomicBool {
+        std::sync::atomic::AtomicBool::new(false)
+    }
+
+    fn request(preset_id: &str, filename: &str) -> ExportRequest {
+        ExportRequest {
+            preset_id: preset_id.to_owned(),
+            custom_width: None,
+            custom_fps: None,
+            filename: filename.to_owned(),
+        }
+    }
+
     #[test]
     fn export_rejects_bad_requests_without_rendering() {
         let Ok(engine) = MediaEngine::system() else {
@@ -512,16 +601,26 @@ mod tests {
         let mut session = Session::create(dir.clone(), manifest("s3")).unwrap();
         // Empty timeline — validation fires before any ffmpeg spawn.
         let err = session
-            .export(&engine, "youtube-1080p", None, None, "out.mp4")
+            .export(
+                &engine,
+                &request("youtube-1080p", "out.mp4"),
+                &flag(),
+                &|_| {},
+            )
             .unwrap_err();
         assert_eq!(err.code, "AVID_RENDER_001");
         // Bad preset / filename likewise never reach ffmpeg.
         let err = session
-            .export(&engine, "nope", None, None, "out.mp4")
+            .export(&engine, &request("nope", "out.mp4"), &flag(), &|_| {})
             .unwrap_err();
         assert_eq!(err.code, "AVID_RENDER_006");
         let err = session
-            .export(&engine, "youtube-1080p", None, None, "../evil.mp4")
+            .export(
+                &engine,
+                &request("youtube-1080p", "../evil.mp4"),
+                &flag(),
+                &|_| {},
+            )
             .unwrap_err();
         assert_eq!(err.code, "AVID_RENDER_006");
         std::fs::remove_dir_all(&dir).ok();
@@ -613,7 +712,12 @@ mod tests {
         let mut session = Session::create(dir.clone(), manifest("export-live")).unwrap();
         session.import_file(&engine, &fixture).unwrap();
         let result = session
-            .export(&engine, "short-1080p", None, None, "short.mp4")
+            .export(
+                &engine,
+                &request("short-1080p", "short.mp4"),
+                &flag(),
+                &|_| {},
+            )
             .unwrap();
         assert_eq!(result.relative_path, "exports/short.mp4");
         assert_eq!((result.width, result.fps), (1080, 30));

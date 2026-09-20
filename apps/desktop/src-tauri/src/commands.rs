@@ -72,6 +72,7 @@ fn soften(error: &avid_media::MediaError) -> String {
         avid_media::MediaError::Parse(_) => {
             "AVID couldn't read this file's metadata. Try converting it.".to_owned()
         }
+        avid_media::MediaError::Cancelled(_) => "Cancelled.".to_owned(),
     }
 }
 
@@ -255,12 +256,14 @@ pub fn import_media(
 }
 
 #[tauri::command]
-pub fn transcribe_media(
+pub async fn transcribe_media(
     handle: AppHandle,
     state: State<'_, crate::AppState>,
+    channel: tauri::ipc::Channel<crate::jobs::JobEvent>,
     asset_id: String,
     language: String,
 ) -> Result<avid_ai::Transcript, CommandError> {
+    use crate::jobs::{JobEvent, JobKind, JobStatus};
     let engine = MediaEngine::system().map_err(CommandError::from)?;
     let cache = handle.path().app_cache_dir().map_err(|e| CommandError {
         code: "AVID_PROJECT_001".to_owned(),
@@ -268,9 +271,60 @@ pub fn transcribe_media(
     })?;
     let model = model_path(&cache);
     let audio_cache = cache.join("avid-audio");
-    state.with_session(|session| {
-        session.transcribe_asset(&engine, &model, &audio_cache, &asset_id, &language)
+    // Snapshot under the lock; inference off-lock (indeterminate progress).
+    let snapshot = state.with_session(|session| {
+        let asset = session
+            .manifest()
+            .assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        Ok((session.dir().to_path_buf(), asset))
+    })?;
+    let jobs = state.jobs();
+    let (job_id, _cancel) = jobs.start(JobKind::Transcribe, format!("Transcribe {asset_id}"));
+    let event = |status: JobStatus| {
+        let _ = channel.send(JobEvent {
+            job_id: job_id.clone(),
+            status,
+            progress: None,
+            message: None,
+        });
+    };
+    event(JobStatus::Running);
+    let transcript = tokio::task::spawn_blocking(move || {
+        crate::session::Session::transcribe_snapshot(
+            &engine,
+            &model,
+            &audio_cache,
+            &snapshot.0,
+            &snapshot.1,
+            &language,
+        )
     })
+    .await
+    .map_err(|e| CommandError {
+        code: "AVID_TRANSCRIBE_003".to_owned(),
+        message: format!("Transcription was interrupted: {e}"),
+    })?;
+    match transcript {
+        Ok(transcript) => {
+            state
+                .with_session(|session| session.store_transcript(&asset_id, transcript.clone()))?;
+            jobs.finish(&job_id, "Transcription complete.");
+            event(JobStatus::Finished);
+            Ok(transcript)
+        }
+        Err(error) => {
+            jobs.fail(&job_id, error.message.clone());
+            event(JobStatus::Failed);
+            Err(error)
+        }
+    }
 }
 
 /// Speech-model resolution: explicit env override (tests) else app cache.
@@ -322,6 +376,200 @@ pub fn timeline_undo(state: State<'_, crate::AppState>) -> Result<String, Comman
 #[tauri::command]
 pub fn timeline_redo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
     state.with_session(|session| session.redo())
+}
+
+/// One frontend-validated edit operation (shape-checked by
+/// `@avid/ai-protocol`; re-validated here against live timeline state).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EditOperation {
+    RemoveRange {
+        start: f64,
+        end: f64,
+    },
+    AddCaption {
+        start: f64,
+        end: f64,
+        text: String,
+    },
+    SplitClip {
+        #[serde(rename = "clipId")]
+        clip_id: String,
+        at: f64,
+    },
+}
+
+/// Per-operation outcome for the diff UI.
+#[derive(Debug, Clone, Serialize)]
+pub struct OpResult {
+    pub index: usize,
+    pub applied: bool,
+    pub message: String,
+}
+
+/// Grouped-apply report: one undo step, per-op honesty.
+#[derive(Debug, Clone, Serialize)]
+pub struct ApplyReport {
+    pub label: String,
+    pub results: Vec<OpResult>,
+}
+
+/// Apply accepted operations as ONE transactional undo step (ADR-008).
+/// Each op is re-validated against the live timeline first; invalid ops are
+/// reported (not applied), valid ones execute atomically — a mid-group
+/// failure rolls everything back and surfaces as an error.
+#[tauri::command]
+pub fn apply_operations(
+    state: State<'_, crate::AppState>,
+    goal: String,
+    operations: Vec<EditOperation>,
+) -> Result<ApplyReport, CommandError> {
+    state.with_session(|session| apply_validated_ops(session, &goal, operations))
+}
+
+/// Pure over an explicit session (unit-tested without Tauri state).
+fn apply_validated_ops(
+    session: &mut crate::session::Session,
+    goal: &str,
+    operations: Vec<EditOperation>,
+) -> Result<ApplyReport, CommandError> {
+    let label: String = format!("AI: {}", goal.trim().chars().take(60).collect::<String>());
+    let duration = session.timeline().duration();
+    let mut results = vec![];
+    let mut commands: Vec<Box<dyn avid_timeline::EditCommand>> = vec![];
+    let mut needs_captions = false;
+
+    for (index, operation) in operations.into_iter().enumerate() {
+        match validate_operation(session, &operation, duration) {
+            Ok(Validated::Skip(message)) => {
+                results.push(OpResult {
+                    index,
+                    applied: false,
+                    message,
+                });
+            }
+            Ok(Validated::Run(command)) => {
+                if matches!(operation, EditOperation::AddCaption { .. }) {
+                    needs_captions = true;
+                }
+                let message = describe_operation(&operation);
+                commands.push(command);
+                results.push(OpResult {
+                    index,
+                    applied: true,
+                    message,
+                });
+            }
+            Err(message) => {
+                results.push(OpResult {
+                    index,
+                    applied: false,
+                    message,
+                });
+            }
+        }
+    }
+    if commands.is_empty() {
+        return Ok(ApplyReport { label, results });
+    }
+    if needs_captions {
+        session.ensure_caption_track()?;
+    }
+    session.mutate_group(&label, commands)?;
+    Ok(ApplyReport { label, results })
+}
+
+/// Validation outcome: runnable command, honest skip, or rejection.
+enum Validated {
+    Run(Box<dyn avid_timeline::EditCommand>),
+    Skip(String),
+}
+
+/// Check one op against live state without mutating.
+fn validate_operation(
+    session: &crate::session::Session,
+    operation: &EditOperation,
+    duration: f64,
+) -> Result<Validated, String> {
+    match operation {
+        EditOperation::RemoveRange { start, end } => {
+            let command = avid_timeline::RemoveRangeCommand::new(*start, *end)
+                .map_err(|e| format!("Invalid range: {e}"))?;
+            if *end > duration {
+                return Err(format!(
+                    "Range ends at {end}s but the timeline is {duration:.1}s."
+                ));
+            }
+            let hits = session
+                .timeline()
+                .clips
+                .values()
+                .any(|clip| clip.start < *end && *start < clip.start + clip.duration);
+            if !hits {
+                return Ok(Validated::Skip(
+                    "Range hits no clips — nothing to remove.".to_owned(),
+                ));
+            }
+            Ok(Validated::Run(Box::new(command)))
+        }
+        EditOperation::AddCaption { start, end, text } => {
+            let text = text.trim();
+            if !start.is_finite() || !end.is_finite() || *start < 0.0 || *end <= *start {
+                return Err("Caption needs 0 ≤ start < end.".to_owned());
+            }
+            if *end > duration {
+                return Err(format!(
+                    "Caption ends at {end}s but the timeline is {duration:.1}s."
+                ));
+            }
+            if text.is_empty() {
+                return Err("Caption text is empty.".to_owned());
+            }
+            if text.len() > 500 {
+                return Err("Caption text exceeds 500 characters.".to_owned());
+            }
+            Ok(Validated::Run(Box::new(avid_timeline::AddClipCommand {
+                clip: avid_timeline::Clip {
+                    id: format!("cap-{}", uuid::Uuid::new_v4()),
+                    source_media_id: "caption".to_owned(),
+                    track_id: "captions".to_owned(),
+                    start: *start,
+                    duration: *end - *start,
+                    in_point: 0.0,
+                    name: text.chars().take(80).collect(),
+                },
+            })))
+        }
+        EditOperation::SplitClip { clip_id, at } => {
+            let clip = session.timeline().clips.get(clip_id).ok_or_else(|| {
+                format!("Unknown clip id: {clip_id} (timeline changed since review?).")
+            })?;
+            if !(clip.start < *at && *at < clip.start + clip.duration) {
+                return Err(format!("Split at {at}s falls outside clip {clip_id}."));
+            }
+            Ok(Validated::Run(Box::new(
+                avid_timeline::SplitClipCommand::new(clip_id, *at),
+            )))
+        }
+    }
+}
+
+/// Human line for the diff UI and reports.
+fn describe_operation(operation: &EditOperation) -> String {
+    match operation {
+        EditOperation::RemoveRange { start, end } => {
+            format!("Remove {start:.1}s → {end:.1}s")
+        }
+        EditOperation::AddCaption { start, end, text } => {
+            format!(
+                "Caption {start:.1}s → {end:.1}s: {}",
+                text.trim().chars().take(60).collect::<String>()
+            )
+        }
+        EditOperation::SplitClip { clip_id, at } => {
+            format!("Split {clip_id} at {at:.1}s")
+        }
+    }
 }
 
 /// Speech-model status for Settings/AI transparency.
@@ -387,23 +635,18 @@ pub async fn ensure_speech_model(handle: AppHandle) -> Result<ModelStatus, Comma
     })
 }
 
-/// Export request from the dialog (mirrors `@avid/shared-types`).
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExportRequest {
-    pub preset_id: String,
-    pub custom_width: Option<u32>,
-    pub custom_fps: Option<u32>,
-    pub filename: String,
-}
-
 /// Render the open timeline to `exports/` and verify the output.
 /// Async + blocking thread: renders take seconds to minutes and must never
-/// freeze the UI. Progress streaming lands with the job center.
+/// freeze the UI. Streams `JobEvent` progress over `channel` and honors
+/// `cancel_job` (the worker kills ffmpeg promptly).
+/// Request shape: [`crate::session::ExportRequest`] (mirrors `@avid/shared-types`).
 #[tauri::command]
 pub async fn render_export(
     state: State<'_, crate::AppState>,
-    request: ExportRequest,
+    channel: tauri::ipc::Channel<crate::jobs::JobEvent>,
+    request: crate::session::ExportRequest,
 ) -> Result<crate::session::ExportResult, CommandError> {
+    use crate::jobs::{JobEvent, JobKind, JobStatus};
     // Snapshot under the lock; render off-lock.
     let snapshot = state.with_session(|session| {
         Ok((
@@ -413,23 +656,67 @@ pub async fn render_export(
         ))
     })?;
     let engine = MediaEngine::system().map_err(CommandError::from)?;
-    tokio::task::spawn_blocking(move || {
-        crate::session::Session::export_snapshot(
+    let jobs = state.jobs();
+    let (job_id, cancel) = jobs.start(JobKind::Render, format!("Export {}", request.filename));
+    let outcome = tokio::task::spawn_blocking(move || {
+        let event = |status: JobStatus, progress: Option<f32>| {
+            let _ = channel.send(JobEvent {
+                job_id: job_id.clone(),
+                status,
+                progress,
+                message: None,
+            });
+        };
+        event(JobStatus::Running, Some(0.0));
+        let result = crate::session::Session::export_snapshot(
             &engine,
             &snapshot.0,
             &snapshot.1,
             &snapshot.2,
-            &request.preset_id,
-            request.custom_width,
-            request.custom_fps,
-            &request.filename,
-        )
+            &request,
+            &cancel,
+            &|fraction| {
+                #[allow(clippy::cast_possible_truncation)]
+                let progress = fraction.clamp(0.0, 1.0) as f32;
+                event(JobStatus::Running, Some(progress));
+                jobs.progress(&job_id, fraction);
+            },
+        );
+        match &result {
+            Ok(_) => {
+                jobs.finish(&job_id, "Export complete.");
+                event(JobStatus::Finished, Some(1.0));
+            }
+            Err(error) if error.code == "AVID_MEDIA_005" => {
+                jobs.cancelled(&job_id);
+                event(JobStatus::Cancelled, None);
+            }
+            Err(error) => {
+                jobs.fail(&job_id, error.message.clone());
+                event(JobStatus::Failed, None);
+            }
+        }
+        result
     })
     .await
     .map_err(|e| CommandError {
         code: "AVID_RENDER_004".to_owned(),
         message: format!("Export was interrupted: {e}"),
-    })?
+    })?;
+    outcome
+}
+
+/// List all known jobs for the job-center UI (newest last).
+#[tauri::command]
+pub fn list_jobs(state: State<'_, crate::AppState>) -> Vec<crate::jobs::JobRecord> {
+    state.jobs().list()
+}
+
+/// Request cancellation of a running job. Returns false for unknown or
+/// already-terminal jobs.
+#[tauri::command]
+pub fn cancel_job(state: State<'_, crate::AppState>, job_id: String) -> bool {
+    state.jobs().request_cancel(&job_id)
 }
 
 #[tauri::command]
@@ -492,5 +779,108 @@ mod tests {
         let info = app_info(avid_project::MANIFEST_VERSION);
         assert_eq!(info.name, "AVID");
         assert_eq!(info.schema_version, avid_project::MANIFEST_VERSION);
+    }
+
+    fn session_with_clips(dir: &std::path::Path) -> crate::session::Session {
+        use avid_project::{ProjectMeta, MANIFEST_VERSION};
+        let manifest = ProjectManifest {
+            id: "apply-test".to_owned(),
+            version: MANIFEST_VERSION,
+            meta: ProjectMeta {
+                name: "Apply".to_owned(),
+                canvas: "16:9".to_owned(),
+                frame_rate: 30,
+                resolution: "1080p".to_owned(),
+                template_id: None,
+                created_at: "now".to_owned(),
+                updated_at: "now".to_owned(),
+            },
+            timeline: serde_json::json!({"tracks": [], "clips": {}}),
+            assets: vec![],
+            transcripts: std::collections::HashMap::new(),
+        };
+        let mut session = crate::session::Session::create(dir.to_path_buf(), manifest).unwrap();
+        session
+            .add_clip(avid_timeline::Clip {
+                id: "a".to_owned(),
+                source_media_id: "m".to_owned(),
+                track_id: "v1".to_owned(),
+                start: 0.0,
+                duration: 20.0,
+                in_point: 0.0,
+                name: "a".to_owned(),
+            })
+            .unwrap();
+        session
+    }
+
+    #[test]
+    fn apply_mixes_valid_and_rejected_ops_then_undoes_as_one() {
+        let dir = std::env::temp_dir().join("avid-apply-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = session_with_clips(&dir);
+        let depth_before = session.undo_depth();
+        let report = apply_validated_ops(
+            &mut session,
+            "trim pause",
+            vec![
+                EditOperation::RemoveRange {
+                    start: 2.0,
+                    end: 5.0,
+                },
+                EditOperation::AddCaption {
+                    start: 6.0,
+                    end: 8.0,
+                    text: "Hello".to_owned(),
+                },
+                EditOperation::SplitClip {
+                    clip_id: "ghost".to_owned(),
+                    at: 1.0,
+                },
+                EditOperation::RemoveRange {
+                    start: 50.0,
+                    end: 60.0,
+                },
+            ],
+        )
+        .unwrap();
+        assert!(report.label.starts_with("AI: "));
+        assert_eq!(report.results.len(), 4);
+        assert!(report.results[0].applied);
+        assert!(report.results[1].applied);
+        assert!(!report.results[2].applied);
+        assert!(!report.results[3].applied);
+        // Exactly one new undo step for the whole group.
+        assert_eq!(session.undo_depth(), depth_before + 1);
+        // Caption track was created; range was cut.
+        assert!(session
+            .timeline()
+            .tracks
+            .iter()
+            .any(|track| track.id == "captions"));
+        session.undo().unwrap();
+        assert_eq!(session.timeline().clips.len(), 1);
+        assert_eq!(session.timeline().clips["a"].duration, 20.0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn apply_with_nothing_valid_mutates_nothing() {
+        let dir = std::env::temp_dir().join("avid-apply-empty");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = session_with_clips(&dir);
+        let depth_before = session.undo_depth();
+        let report = apply_validated_ops(
+            &mut session,
+            "nope",
+            vec![EditOperation::SplitClip {
+                clip_id: "ghost".to_owned(),
+                at: 1.0,
+            }],
+        )
+        .unwrap();
+        assert!(!report.results[0].applied);
+        assert_eq!(session.undo_depth(), depth_before);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

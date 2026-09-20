@@ -7,6 +7,7 @@
 //! mutation path; progress streams over Channels; media bytes never cross IPC.
 
 mod commands;
+mod jobs;
 mod session;
 
 /// Shared application state: schema handshake + the open project session.
@@ -17,6 +18,7 @@ pub struct AppState {
     /// Schema version handshake for the frontend.
     schema_version: u32,
     session: std::sync::Mutex<Option<session::Session>>,
+    jobs: jobs::JobRegistry,
 }
 
 impl AppState {
@@ -24,6 +26,7 @@ impl AppState {
         Self {
             schema_version: avid_project::MANIFEST_VERSION,
             session: std::sync::Mutex::new(None),
+            jobs: jobs::JobRegistry::default(),
         }
     }
 
@@ -31,6 +34,12 @@ impl AppState {
     #[must_use]
     pub fn schema_version(&self) -> u32 {
         self.schema_version
+    }
+
+    /// Job registry for the job-center UI.
+    #[must_use]
+    pub fn jobs(&self) -> jobs::JobRegistry {
+        self.jobs.clone()
     }
 
     /// Open (or replace) the current session, e.g. after create/open.
@@ -75,12 +84,15 @@ fn main() {
             commands::speech_model_status,
             commands::ensure_speech_model,
             commands::render_export,
+            commands::list_jobs,
+            commands::cancel_job,
             commands::timeline_get,
             commands::timeline_add_clip,
             commands::timeline_remove_clip,
             commands::timeline_split_clip,
             commands::timeline_undo,
             commands::timeline_redo,
+            commands::apply_operations,
         ])
         .run(tauri::generate_context!())
         .expect("AVID backend failed to start");
