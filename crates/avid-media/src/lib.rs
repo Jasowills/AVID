@@ -368,6 +368,34 @@ impl MediaEngine {
         min_seconds: f64,
     ) -> Result<Vec<SilenceSpan>, MediaError> {
         check_input_path(input)?;
+        self.detect_silence_any(input, noise_db, min_seconds)
+    }
+
+    /// Detection by explicit path (project-joined absolute paths from jobs).
+    /// Same contract as [`MediaEngine::probe_file`]: the caller owns validity.
+    pub fn detect_silence_file(
+        &self,
+        input: &Path,
+        noise_db: f32,
+        min_seconds: f64,
+    ) -> Result<Vec<SilenceSpan>, MediaError> {
+        if !input.is_file() {
+            return Err(MediaError::ProcessFailed {
+                op: "detectSilence",
+                exit: "missing".to_owned(),
+                stderr: format!("no such file: {}", input.display()),
+            });
+        }
+        self.detect_silence_any(input, noise_db, min_seconds)
+    }
+
+    fn detect_silence_any(
+        &self,
+        input: &Path,
+        noise_db: f32,
+        min_seconds: f64,
+    ) -> Result<Vec<SilenceSpan>, MediaError> {
+        check_input_path(input)?;
         if !(-80.0..=-10.0).contains(&noise_db) || min_seconds <= 0.0 || !min_seconds.is_finite() {
             return Err(MediaError::ProcessFailed {
                 op: "detectSilence",

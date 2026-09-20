@@ -93,6 +93,7 @@ fn main() {
             commands::timeline_undo,
             commands::timeline_redo,
             commands::apply_operations,
+            commands::propose_rough_cut,
         ])
         .run(tauri::generate_context!())
         .expect("AVID backend failed to start");

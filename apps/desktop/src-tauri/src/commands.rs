@@ -378,6 +378,159 @@ pub fn timeline_redo(state: State<'_, crate::AppState>) -> Result<String, Comman
     state.with_session(|session| session.redo())
 }
 
+/// Confidence in a proposal (honest buckets, never fake precision — §119).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Confidence {
+    High,
+    Medium,
+}
+
+/// One proposed cut for review. Never applied without explicit accept.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProposedCut {
+    pub start: f64,
+    pub end: f64,
+    pub reason: String,
+    pub confidence: Confidence,
+}
+
+/// A rough-cut proposal: sorted cuts plus totals for the review UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoughCutProposal {
+    pub cuts: Vec<ProposedCut>,
+    pub removable_seconds: f64,
+    /// What was analyzed, e.g. `"silence+transcript"`.
+    pub analyzed: String,
+}
+
+/// Merge silence spans and filler hits into a sorted, deduplicated proposal.
+/// Filler hits fully inside a silence span are dropped (one cut covers both).
+/// Pure over explicit inputs — unit-tested without ffmpeg or models.
+pub fn build_proposal(
+    silences: &[avid_media::SilenceSpan],
+    fillers: &[avid_ai::FillerHit],
+    include_fillers: bool,
+) -> RoughCutProposal {
+    let mut cuts: Vec<ProposedCut> = silences
+        .iter()
+        .map(|span| ProposedCut {
+            start: span.start,
+            end: span.end,
+            reason: "long pause".to_owned(),
+            confidence: Confidence::High,
+        })
+        .collect();
+    let mut analyzed = "silence".to_owned();
+    if include_fillers {
+        analyzed = "silence+transcript".to_owned();
+        for hit in fillers {
+            let inside_silence = silences
+                .iter()
+                .any(|span| span.start <= hit.start && hit.end <= span.end);
+            if !inside_silence {
+                cuts.push(ProposedCut {
+                    start: hit.start,
+                    end: hit.end,
+                    reason: format!("filler word: {}", hit.word),
+                    confidence: Confidence::Medium,
+                });
+            }
+        }
+    }
+    cuts.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let removable_seconds = cuts.iter().map(|cut| cut.end - cut.start).sum();
+    RoughCutProposal {
+        cuts,
+        removable_seconds,
+        analyzed,
+    }
+}
+
+/// Propose a rough cut for an asset: silence detection plus optional filler
+/// detection from a stored transcript. Async job (ffmpeg pass + inference
+/// must never freeze the UI); returns a proposal for the review UI.
+#[tauri::command]
+pub async fn propose_rough_cut(
+    state: State<'_, crate::AppState>,
+    channel: tauri::ipc::Channel<crate::jobs::JobEvent>,
+    asset_id: String,
+    min_silence_seconds: f64,
+    include_fillers: bool,
+) -> Result<RoughCutProposal, CommandError> {
+    use crate::jobs::{JobEvent, JobKind, JobStatus};
+    if !(0.3..=10.0).contains(&min_silence_seconds) {
+        return Err(CommandError {
+            code: "AVID_MEDIA_003".to_owned(),
+            message: "Minimum silence must be 0.3–10 seconds.".to_owned(),
+        });
+    }
+    let snapshot = state.with_session(|session| {
+        let asset = session
+            .manifest()
+            .assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        let transcript = if include_fillers {
+            session.transcript_for(&asset_id)
+        } else {
+            None
+        };
+        Ok((session.dir().to_path_buf(), asset, transcript))
+    })?;
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    let jobs = state.jobs();
+    let (job_id, _cancel) = jobs.start(JobKind::Transcribe, format!("Rough cut {asset_id}"));
+    let event = |status: JobStatus| {
+        let _ = channel.send(JobEvent {
+            job_id: job_id.clone(),
+            status,
+            progress: None,
+            message: None,
+        });
+    };
+    event(JobStatus::Running);
+    let proposal = tokio::task::spawn_blocking(move || {
+        let path = snapshot.0.join(&snapshot.1.relative_path);
+        let silences = engine.detect_silence_file(&path, -30.0, min_silence_seconds)?;
+        let fillers = snapshot
+            .2
+            .as_ref()
+            .map(|transcript| transcript.find_fillers())
+            .unwrap_or_default();
+        Ok::<_, CommandError>(build_proposal(
+            &silences,
+            &fillers,
+            include_fillers && snapshot.2.is_some(),
+        ))
+    })
+    .await
+    .map_err(|e| CommandError {
+        code: "AVID_MEDIA_003".to_owned(),
+        message: format!("Rough-cut analysis was interrupted: {e}"),
+    })?;
+    match &proposal {
+        Ok(proposal) => {
+            jobs.finish(&job_id, &format!("{} cuts proposed.", proposal.cuts.len()));
+            event(JobStatus::Finished);
+        }
+        Err(error) => {
+            jobs.fail(&job_id, error.message.clone());
+            event(JobStatus::Failed);
+        }
+    }
+    proposal
+}
+
 /// One frontend-validated edit operation (shape-checked by
 /// `@avid/ai-protocol`; re-validated here against live timeline state).
 #[derive(Debug, Clone, Deserialize)]
@@ -862,6 +1015,46 @@ mod tests {
         assert_eq!(session.timeline().clips.len(), 1);
         assert_eq!(session.timeline().clips["a"].duration, 20.0);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn proposal_merges_silence_and_fillers() {
+        use avid_ai::FillerHit;
+        use avid_media::SilenceSpan;
+        let silences = vec![
+            SilenceSpan {
+                start: 10.0,
+                end: 14.0,
+            },
+            SilenceSpan {
+                start: 2.0,
+                end: 3.0,
+            },
+        ];
+        let fillers = vec![
+            FillerHit {
+                word: "um".to_owned(),
+                start: 11.0,
+                end: 11.4,
+            },
+            FillerHit {
+                word: "uh".to_owned(),
+                start: 20.0,
+                end: 20.5,
+            },
+        ];
+        let proposal = build_proposal(&silences, &fillers, true);
+        // Sorted; the in-silence "um" is covered by the pause cut.
+        assert_eq!(proposal.cuts.len(), 3);
+        assert_eq!((proposal.cuts[0].start, proposal.cuts[0].end), (2.0, 3.0));
+        assert_eq!(proposal.cuts[1].reason, "long pause");
+        assert_eq!(proposal.cuts[2].reason, "filler word: uh");
+        assert!((proposal.removable_seconds - 5.5).abs() < 1e-9);
+        assert_eq!(proposal.analyzed, "silence+transcript");
+
+        let silence_only = build_proposal(&silences, &fillers, false);
+        assert_eq!(silence_only.cuts.len(), 2);
+        assert_eq!(silence_only.analyzed, "silence");
     }
 
     #[test]
