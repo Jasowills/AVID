@@ -13,6 +13,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::AiError;
 
+/// A filler-word hit with its timeline range.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FillerHit {
+    /// Surface text as spoken.
+    pub word: String,
+    /// Start in seconds.
+    pub start: f64,
+    /// End in seconds.
+    pub end: f64,
+}
+
 /// A timed word (or word-segment with `-ml 1`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Word {
@@ -54,6 +65,57 @@ impl Transcript {
     #[must_use]
     pub fn words(&self) -> Vec<&Word> {
         self.segments.iter().flat_map(|s| &s.words).collect()
+    }
+
+    /// Find filler words (`um`, `uh`, `like`, …) with their ranges.
+    /// Heuristic by design (documented Medium confidence downstream):
+    /// single tokens matched case-insensitively after stripping surrounding
+    /// punctuation, plus the `you know` bigram.
+    #[must_use]
+    pub fn find_fillers(&self) -> Vec<FillerHit> {
+        const SINGLES: &[&str] = &[
+            "um",
+            "uh",
+            "erm",
+            "ah",
+            "eh",
+            "like",
+            "basically",
+            "actually",
+            "literally",
+            "stuff",
+        ];
+        let words = self.words();
+        let clean: Vec<String> = words
+            .iter()
+            .map(|word| {
+                word.word
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_lowercase()
+            })
+            .collect();
+        let mut hits = vec![];
+        let mut index = 0;
+        while index < clean.len() {
+            if index + 1 < clean.len() && clean[index] == "you" && clean[index + 1] == "know" {
+                hits.push(FillerHit {
+                    word: "you know".to_owned(),
+                    start: words[index].start,
+                    end: words[index + 1].end,
+                });
+                index += 2;
+                continue;
+            }
+            if SINGLES.contains(&clean[index].as_str()) {
+                hits.push(FillerHit {
+                    word: words[index].word.clone(),
+                    start: words[index].start,
+                    end: words[index].end,
+                });
+            }
+            index += 1;
+        }
+        hits
     }
 
     /// Find timeline ranges covering a phrase (case-insensitive word run).
@@ -183,5 +245,37 @@ mod tests {
     #[test]
     fn rejects_malformed_engine_output() {
         assert!(parse_whisper_json("{nope", "en", "x").is_err());
+    }
+
+    #[test]
+    fn filler_finder_hits_singles_and_you_know() {
+        let transcript = Transcript {
+            language: "en".to_owned(),
+            provider: "test".to_owned(),
+            segments: vec![Segment {
+                start: 0.0,
+                end: 6.0,
+                text: "Well, um, you know, Kafka is, like, great.".to_owned(),
+                speaker: None,
+                words: [
+                    "Well,", "um,", "you", "know,", "Kafka", "is,", "like,", "great.",
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(i, word)| Word {
+                    word: word.to_owned(),
+                    start: i as f64,
+                    end: i as f64 + 0.8,
+                    confidence: None,
+                })
+                .collect(),
+            }],
+        };
+        let hits = transcript.find_fillers();
+        assert_eq!(hits.len(), 3);
+        assert_eq!(hits[0].word, "um,");
+        assert_eq!((hits[1].start, hits[1].end), (2.0, 3.8));
+        assert_eq!(hits[1].word, "you know");
+        assert_eq!(hits[2].word, "like,");
     }
 }

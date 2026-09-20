@@ -197,6 +197,35 @@ pub fn parse_progress_line(line: &str) -> Option<(u64, String)> {
     Some((time_us?, speed.unwrap_or("").to_owned()))
 }
 
+/// A detected silence span in seconds (rough-cut proposals).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SilenceSpan {
+    pub start: f64,
+    pub end: f64,
+}
+
+/// Parse `silencedetect` stderr into spans. Pairs `silence_start` with the
+/// next `silence_end`; a trailing unpaired start is dropped (duration
+/// unknown) and documented in the proposal as unverified.
+pub fn parse_silence_output(stderr: &str) -> Vec<SilenceSpan> {
+    let mut spans = vec![];
+    let mut open: Option<f64> = None;
+    for line in stderr.lines() {
+        let line = line.trim();
+        if let Some(value) = line.split_once("silence_start:") {
+            open = value.1.trim().parse().ok();
+        } else if let Some(value) = line.split_once("silence_end:") {
+            let end: Option<f64> = value.1.split('|').next().unwrap_or("").trim().parse().ok();
+            if let (Some(start), Some(end)) = (open.take(), end) {
+                if end > start {
+                    spans.push(SilenceSpan { start, end });
+                }
+            }
+        }
+    }
+    spans
+}
+
 /// Stateful `-progress` tracker: `-progress pipe:1` emits one `key=value`
 /// per line (`out_time_us=…`, then `progress=continue|end`). Feed every
 /// stdout line; returns the 0–1 fraction on `progress=` lines.
@@ -326,6 +355,54 @@ impl MediaEngine {
             });
         }
         parse_probe_output(&String::from_utf8_lossy(&output.stdout))
+    }
+
+    /// Run silence detection (`silencedetect` filter) on a project file.
+    /// `noise_db`: threshold like -30.0; `min_seconds`: minimum span length.
+    /// Spans shorter than the minimum are filtered here (the filter's own
+    /// `d=` already gates, this is a second pass for float safety).
+    pub fn detect_silence(
+        &self,
+        input: &Path,
+        noise_db: f32,
+        min_seconds: f64,
+    ) -> Result<Vec<SilenceSpan>, MediaError> {
+        check_input_path(input)?;
+        if !(-80.0..=-10.0).contains(&noise_db) || !(min_seconds > 0.0) {
+            return Err(MediaError::ProcessFailed {
+                op: "detectSilence",
+                exit: "params".to_owned(),
+                stderr: "noise_db must be -80..-10 and min_seconds positive".to_owned(),
+            });
+        }
+        let output = Command::new(&self.ffmpeg)
+            .args(["-hide_banner", "-nostats", "-i"])
+            .arg(input)
+            .args([
+                "-af",
+                &format!("silencedetect=noise={noise_db}dB:d={min_seconds}"),
+                "-f",
+                "null",
+                "-",
+            ])
+            .output()
+            .map_err(|e| MediaError::BinaryUnavailable(e.to_string()))?;
+        if !output.status.success() {
+            return Err(MediaError::ProcessFailed {
+                op: "detectSilence",
+                exit: output
+                    .status
+                    .code()
+                    .map_or("signal".to_owned(), |c| c.to_string()),
+                stderr: truncate(&String::from_utf8_lossy(&output.stderr)),
+            });
+        }
+        Ok(
+            parse_silence_output(&String::from_utf8_lossy(&output.stderr))
+                .into_iter()
+                .filter(|span| span.end - span.start >= min_seconds)
+                .collect(),
+        )
     }
 
     /// Build (not run) the proxy transcode command for inspection/testing.
@@ -571,6 +648,49 @@ mod tests {
         );
         assert_eq!(parse_progress_line(""), None);
         assert_eq!(parse_progress_line("frame=42"), None);
+    }
+
+    #[test]
+    fn silence_parser_pairs_authentic_output() {
+        // Captured from fixtures/media/silence_5s.mp4 (ffmpeg 9.0.1).
+        let stderr = "Input #0, mov,mp4,m4a,3gp,3g2,mj2\n\
+            [Parsed_silencedetect_0 @ 0x7fe924716640] silence_start: 0\n\
+            [Parsed_silencedetect_0 @ 0x7fe924716640] silence_end: 4.992 | silence_duration: 4.992\n";
+        assert_eq!(
+            parse_silence_output(stderr),
+            vec![SilenceSpan {
+                start: 0.0,
+                end: 4.992
+            }]
+        );
+        // Continuous tone: no spans (true negative).
+        assert!(parse_silence_output("frame=  42 fps=30\n").is_empty());
+        // Trailing unpaired start is dropped, not hallucinated.
+        assert!(parse_silence_output("silence_start: 3.0\n").is_empty());
+    }
+
+    /// LIVE: real `silencedetect` on the silence fixture (expects ~5 s) and
+    /// on the tone fixture (expects none). Ignored without fixtures.
+    #[test]
+    #[ignore]
+    fn live_detect_silence_on_fixtures() {
+        let engine = MediaEngine::system().expect("system ffmpeg/ffprobe");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/media");
+        if !dir.join("silence_5s.mp4").is_file() {
+            return;
+        }
+        let staged = Path::new("silence_5s.mp4");
+        std::fs::copy(dir.join("silence_5s.mp4"), staged).unwrap();
+        let spans = engine.detect_silence(staged, -30.0, 0.5).unwrap();
+        std::fs::remove_file(staged).ok();
+        assert_eq!(spans.len(), 1);
+        assert!((spans[0].end - spans[0].start - 5.0).abs() < 0.2);
+
+        let staged = Path::new("talkinghead_10s.mp4");
+        std::fs::copy(dir.join("talkinghead_10s.mp4"), staged).unwrap();
+        let spans = engine.detect_silence(staged, -30.0, 0.5).unwrap();
+        std::fs::remove_file(staged).ok();
+        assert!(spans.is_empty());
     }
 
     #[test]

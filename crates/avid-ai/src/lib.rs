@@ -128,7 +128,7 @@ impl ProviderRegistry {
 pub mod transcript;
 pub mod whisper;
 
-pub use transcript::{Segment as TranscriptSegment, Transcript, Word as TranscriptWord};
+pub use transcript::{FillerHit, Segment as TranscriptSegment, Transcript, Word as TranscriptWord};
 pub use whisper::{transcribe_wav, TranscribeError};
 
 /// Default speech model (verified: `scripts/verify-transcription.sh`).
