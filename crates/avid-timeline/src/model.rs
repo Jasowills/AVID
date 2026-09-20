@@ -268,4 +268,19 @@ mod tests {
         let back: Timeline = serde_json::from_str(&json).unwrap();
         assert_eq!(tl, back);
     }
+
+    #[test]
+    fn shipped_example_timeline_parses() {
+        use std::path::Path;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/technical-explainer/project.json");
+        if !path.is_file() {
+            return;
+        }
+        let json = std::fs::read_to_string(path).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let timeline: Timeline = serde_json::from_value(manifest["timeline"].clone()).unwrap();
+        assert_eq!(timeline.tracks.len(), 2);
+        assert_eq!(timeline.duration(), 12.0);
+    }
 }

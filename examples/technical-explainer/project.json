@@ -1,0 +1,49 @@
+{
+  "id": "example-technical-explainer",
+  "version": 1,
+  "meta": {
+    "name": "Technical Explainer (Example)",
+    "canvas": "16:9",
+    "frame_rate": 30,
+    "resolution": "1080p",
+    "template_id": "technical-explainer",
+    "created_at": "2026-09-20T00:00:00Z",
+    "updated_at": "2026-09-20T00:00:00Z"
+  },
+  "timeline": {
+    "tracks": [
+      { "id": "v1", "kind": "video", "index": 0, "name": "V1", "locked": false, "muted": false },
+      { "id": "a1", "kind": "audio", "index": 0, "name": "A1", "locked": false, "muted": false }
+    ],
+    "clips": {
+      "intro": {
+        "id": "intro",
+        "source_media_id": "example-talk",
+        "track_id": "v1",
+        "start": 0.0,
+        "duration": 12.0,
+        "in_point": 30.0,
+        "name": "Intro — what is Kafka"
+      },
+      "intro-audio": {
+        "id": "intro-audio",
+        "source_media_id": "example-talk",
+        "track_id": "a1",
+        "start": 0.0,
+        "duration": 12.0,
+        "in_point": 30.0,
+        "name": "Intro audio"
+      }
+    }
+  },
+  "assets": [
+    {
+      "id": "example-talk",
+      "file_name": "example-talk.mp4",
+      "relative_path": "media/example-talk.mp4",
+      "duration": 600.0,
+      "dimensions": [1920, 1080],
+      "hash": null
+    }
+  ]
+}

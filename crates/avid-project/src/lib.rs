@@ -186,22 +186,49 @@ mod tests {
     #[test]
     fn rejects_future_versions_without_breaking() {
         let err = ProjectManifest::from_json(&manifest_json(99, "media/a.mp4")).unwrap_err();
-        assert!(matches!(err, ProjectError::UnsupportedVersion { found: 99, .. }));
+        assert!(matches!(
+            err,
+            ProjectError::UnsupportedVersion { found: 99, .. }
+        ));
         assert_eq!(err.code(), "AVID_PROJECT_002");
     }
 
     #[test]
     fn rejects_traversal_and_absolute_paths() {
-        for bad in ["../evil.mp4", "media/../../x.mp4", "/etc/passwd", "", "C:\\Windows\\x.mp4"] {
+        for bad in [
+            "../evil.mp4",
+            "media/../../x.mp4",
+            "/etc/passwd",
+            "",
+            "C:\\Windows\\x.mp4",
+        ] {
             let err = ProjectManifest::from_json(&manifest_json(1, bad)).unwrap_err();
             assert!(matches!(err, ProjectError::PathTraversal(_)), "path: {bad}");
         }
-        assert_eq!(ProjectError::PathTraversal("x".to_owned()).code(), "AVID_PROJECT_003");
+        assert_eq!(
+            ProjectError::PathTraversal("x".to_owned()).code(),
+            "AVID_PROJECT_003"
+        );
     }
 
     #[test]
     fn rejects_malformed_json() {
         let err = ProjectManifest::from_json("{not json").unwrap_err();
         assert!(matches!(err, ProjectError::InvalidManifest(_)));
+    }
+
+    #[test]
+    fn shipped_example_parses() {
+        use std::path::Path;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/technical-explainer/project.json");
+        if !path.is_file() {
+            return;
+        }
+        let json = std::fs::read_to_string(path).unwrap();
+        let manifest = ProjectManifest::from_json(&json).unwrap();
+        assert_eq!(manifest.id, "example-technical-explainer");
+        assert_eq!(manifest.version, MANIFEST_VERSION);
+        assert!(!manifest.assets.is_empty());
     }
 }

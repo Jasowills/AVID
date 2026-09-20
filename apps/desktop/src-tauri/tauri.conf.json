@@ -1,19 +1,36 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AVID",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "identifier": "com.avid.editor",
-  "build": {},
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
   "app": {
-    "windows": [],
+    "windows": [
+      {
+        "title": "AVID",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600
+      }
+    ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPCACHE/**", "$APPDATA/com.avid.editor/**"]
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
-  },
-  "_note": "Scaffold placeholder only (Phase 0). Real Tauri config lands in Phase 1 with pinned Tauri 2.x."
+    "icon": ["icons/icon.png"],
+    "createUpdaterArtifacts": false
+  }
 }

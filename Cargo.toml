@@ -11,6 +11,7 @@ members = [
   "crates/avid-render",
   "crates/avid-ai",
   "crates/avid-cli",
+  "apps/desktop/src-tauri",
 ]
 resolver = "2"
 
