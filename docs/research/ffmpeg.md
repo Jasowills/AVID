@@ -54,6 +54,11 @@ Log the encoder used in every job receipt for bug reports.
 
 `scripts/make-fixtures.sh` (Phase 2): `testsrc2`+`sine` talking-head, `color`+`anullsrc` silence, `smptebars` vertical, 4K proxy trigger, `head -c` corrupt sample, `ffprobe` JSON golden. Verify: exists, duration ±0.1 s, streams, thumbnail non-black (histogram), waveform ~0 for silence. `drawtext` burn-in timecode for frame-accuracy asserts.
 
-## Recommendation
+## Verified on this machine (2026-09-20)
+
+- System ffmpeg 9.0.1 (Homebrew, `--enable-gpl` build!) has `libx264`, `h264_videotoolbox`, `aac` — but **no `drawtext`/`subtitles`/`ass` video filters** (no libfreetype/libass). Consequence: burned-in text needs the pinned sidecar (ADR-002); `avid-render` exposes `argv_compat` + `AVID_RENDER_005` + `ffmpeg_supports_text` for graceful degradation. Real concat render + ffprobe check passes.
+- Note: Homebrew's `--enable-gpl` build is GPL — another reason the shipped sidecar must be a clean LGPL build, not a copy of system ffmpeg (licensing register).
+
+## Recommendation (unchanged — findings above reinforce it)
 
 MVP on **(1) version-pinned sidecar + `MediaEngine` abstraction**. Add (3) streaming pipe only if profiling demands for preview/waveform. Defer linked `ffmpeg-next` until post-MVP preview engine. Licensing: stay LGPL (no `--enable-gpl`, no `libx264` in distributed LGPL build or go GPL-compliant; never `--enable-nonfree`).

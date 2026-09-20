@@ -21,7 +21,11 @@
 - **Language:** `info.language + probability` (all variants, 99 langs) → `project.json.transcript.language`.
 - **Speakers:** MVP = `tinydiarize` turn markers + manual Speaker 1/2 relabel (zero deps, offline). Full diarization = `pyannote.audio` via optional sidecar, explicit opt-in (HF token — disclose).
 
-## Recommendation (MVP + fallback chain)
+## Verified on this machine (2026-09-20)
+
+- whisper.cpp **1.9.1** (`whisper-cli`, Homebrew) + `ggml-tiny.en.bin` (77 MB): `say`-synthesized "Kafka has three partitions, and each consumer group shares the work." → ffmpeg 16 kHz mono → exact transcript in ~1 s, plus 14 ordered word-segments with `-ml 1` (span 0–4300 ms). Rerunnable: `scripts/verify-transcription.sh`. JSON shape captured in `avid-ai/src/transcript.rs` tests. In-app `whisper-rs` binding is the remaining step — same engine, same JSON, no format risk.
+
+## Recommendation (MVP + fallback chain, unchanged — verified above)
 
 **`whisper.cpp` via `whisper-rs` as in-app Rust background job.** Default `base.en` (142 MB, fast CPU) with auto-download `small` / `large-v3-turbo` (best Apple Silicon speed/accuracy). Flow: `extractAudio 16 kHz mono WAV (ffmpeg) → Silero-VAD split → whisper.cpp ggml → JSON {segments[], words[], lang, conf} → transcript panel`. Fully offline, MIT, Metal/CoreML/ANE on Apple Silicon, AVX/NEON/Vulkan/CUDA elsewhere, zero Python, crash-isolated, cancellable.
 

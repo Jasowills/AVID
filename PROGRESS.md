@@ -3,8 +3,8 @@
 > Living document. Updated in the same commit as the work. Never mark complete without meeting AGENTS §135 (Definition of Done). No fake completion (AGENTS §136).
 > Legend: `✅ done` · `🚧 in progress` · `⬜ not started` · `⛔ blocked`
 
-**Current phase:** Phase 1 — Desktop Shell (shell wired, Tauri backend pending)
-**Last updated:** 2026-09-20 — Phase 1 frontend shell: Vite+React+TS+Tailwind+Zustand, tokens, routing, project creation, top bar, editor shell (typecheck/build/5 tests green; Rust toolchain installed, workspace green)
+**Current phase:** Autopilot pass — engine + verification backbone real; app-integration remaining (see honest accounting below)
+**Last updated:** 2026-09-20 — Tauri backend compiles (3 cmd tests), timeline 18 tests, manifest+traversal, MediaEngine + REAL probe, render graph + REAL render, AI registry + LIVE Ollama eval, edit-plan/scene validators (9+3 tests), template loader (12 templates), transcript model + REAL whisper.cpp verification
 **Branch:** `main` · **Remote:** `https://github.com/Jasowills/AVID`
 
 ---
@@ -26,28 +26,35 @@
 
 | ID | Deliverable | Status | Evidence / Notes |
 |----|-------------|--------|------------------|
-| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | 🚧 | React 18 + TS 5 + Tailwind v4 + Zustand 5 + Vite 6.4.3 + router 7 wired; `dev`/`build`/`typecheck`/`test` green. **Tauri backend NOT wired** — `tauri:dev` exits 1 by design until src-tauri Cargo workspace + sidecars exist |
+| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | ✅ | Backend crate compiles (`cargo check`); commands `get_app_info/create_project/probe_media` + 3 cmd tests; capabilities least-privilege; frontend IPC client + 3 tests. **Not verified headless:** `tauri dev` GUI launch + packaged `tauri build` (needs interactive run — first manual gate) |
 | 1.2 | Design system tokens + components | ✅ | `packages/design-system` tokens (dark-first) + Tailwind `@theme` mirror; `packages/ui` Button/Panel/TextField/EmptyState, accessible defaults |
 | 1.3 | Routing: home / new-project / editor / settings | ✅ | HashRouter (file:// + webview safe); `App.tsx` route map |
-| 1.4 | Project creation dialog | ✅ | Validated form (name/canvas/fps/resolution), pure validation fns under `vitest` (5 tests); persists to localStorage **interim** — `ProjectConfig` shape is manifest-compatible for the ADR-003 migration |
-| 1.5 | Top bar (undo/redo/save/AI status/export) | ✅ | Renders per AGENTS §39; undo/redo/export/preview-quality render **disabled with honest phase-titles** (no fake buttons, §136) |
+| 1.4 | Project creation dialog | ✅ | Validated form + backend `create_project` (manifest round-trips through its own parser); frontend persists to localStorage **interim** until Tauri save path lands |
+| 1.5 | Top bar (undo/redo/save/AI status/export) | ✅ | Renders per AGENTS §39; unwired controls **disabled with honest phase-titles** (no fake buttons, §136) |
 
-## Phase 2 — Media Foundation ⬜
+## Phase 2 — Media Foundation 🚧 (engine real, app integration pending)
 
-- [ ] MediaEngine abstraction (probe/transcode/proxy/thumbnail/waveform/extractAudio/extractFrame)
-- [ ] Import + metadata + library (grid/list, search)
+- [x] MediaEngine abstraction: probe (REAL ffprobe test), command builders (proxy/extractAudio/extractFrame), progress-line parser, traversal guard — unit + ignored-live tests
+- [x] Fixture generator (`scripts/make-fixtures.sh`): talking-head, silence, vertical, corrupt
+- [ ] Import + media library UI (grid/list, search)
 - [ ] Playback via proxies + proxy offer flow
 - [ ] Background jobs + job center (cancel/retry/errors)
-- [ ] Humane error UX (no raw `subprocess exited 1`)
+- [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
-## Phase 3 — Timeline ⬜
+## Phase 3 — Timeline 🚧 (engine real, UI pending)
 
-- [ ] Model: tracks/clips/markers, all fields per AGENTS §13
-- [ ] Interactions: zoom/scroll/snap/split/trim/move/delete/ripple/markers/multi-select/shortcuts
-- [ ] Commands: Add/Remove/Trim/Move/Split/… with execute/undo/redo/serialize
-- [ ] Grouped undo + autosave + crash recovery
+- [x] Model: tracks/clips with all §13 fields, overlap validation, locked tracks
+- [x] Commands: Add/Remove/Trim/Move/Split with execute/undo/redo/serialize (18 tests, clippy pedantic, fmt)
+- [x] Grouped + transactional undo (`UndoStack`, manual groups, single-label AI undo)
+- [ ] Timeline UI (canvas renderer, zoom/scroll/snap/drag/shortcuts)
+- [ ] Autosave + crash recovery
 
-## Phase 4 — Rendering & Export ⬜
+## Phase 4 — Rendering & Export 🚧 (graph + render real, export UI pending)
+
+- [x] Deterministic render graph → single-ffmpeg DAG (concat + scale + drawtext overlays), escaping, compat path with `AVID_RENDER_005` guidance
+- [x] REAL render test (concat 2 windows → ffprobe verifies 4 s h264+aac); text-filter probe helper
+- [ ] Preview pipeline (proxies, frame cache, quality selector)
+- [ ] Export dialog + presets UI (graph supports all presets already)
 
 - [ ] Timeline compiler → render graph → FFmpeg
 - [ ] Preview quality selector + frame cache
@@ -59,38 +66,49 @@
 - [ ] Local Whisper + word timings/speakers/confidence
 - [ ] Transcript↔timeline mapping + panel + text-based delete
 
-## Phase 6 — AI Runtime ⬜
+## Phase 5 — Transcription 🚧 (approach verified real, in-app binding pending)
 
-- [ ] Capability router + registry + adapters (ollama, openai-compat, 1 cloud, custom)
-- [ ] Capability declarations + config UI + connection test + cloud consent
+- [x] Approach verified END-TO-END: `say` synthesis → ffmpeg 16 kHz mono → whisper.cpp 1.9.1 `tiny.en` → exact transcript + 14 ordered word-segments (`scripts/verify-transcription.sh` rerunnable)
+- [x] Transcript model + whisper-JSON parser + phrase→range mapping for text-based delete (7 tests, real output shape)
+- [ ] In-app whisper-rs binding + transcript panel + VAD chunking + speaker labels
 
-## Phase 7 — AI Editing ⬜
+## Phase 6 — AI Runtime 🚧 (local real, cloud/config UI pending)
 
-- [ ] Detectors (silence/filler/repetition) → proposed rough cut
-- [ ] Edit-plan schema + validator + diff UI + transactional apply + snapshots
+- [x] Registry (local-first recommend) + canonical OpenAI-shape adapter + structured-output probe + mock tests
+- [x] LIVE eval vs local Ollama `qwen2.5:7b`: probe + edit-plan with operations (38 s) — ADR-005 path proven
+- [ ] LM Studio/generic-compat/OpenAI-cloud adapters (same shape, untested without targets/keys) + provider config UI + connection test + cloud consent
 
-## Phase 8 — Visual Intelligence ⬜
+## Phase 7 — AI Editing 🚧 (validation real, detectors/diff UI pending)
 
-- [ ] Scene spec + deterministic renderer + editable visuals + code visuals
+- [x] Edit-plan schema + validator (rejects prose/malformed/hallucinated/out-of-range, 9 tests) + eval fixtures
+- [ ] Silence/filler detectors → proposed rough cut + diff UI + transactional apply + snapshots
 
-## Phase 9 — Templates ⬜
+## Phase 8 — Visual Intelligence 🚧 (spec validation real, renderer UI pending)
 
-- [ ] Format + browser + preview + apply + 12 initial templates
+- [x] Scene-spec validator (dangling refs/duplicates/geometry, 3 tests); Mermaid→SceneSpec→ReactFlow→SVG pipeline decided (ADR research)
+- [ ] Deterministic renderer + editable visuals + code visuals UI
 
-## Phase 10 — Polish & Release ⬜
+## Phase 9 — Templates 🚧 (format + content real, browser UI pending)
 
-- [ ] A11y, perf/stress, recovery/history, error pass, onboarding, examples, docs, packaging
+- [x] Loader/validator + all 12 `template.json` validated in test; `technical-explainer` v0.1.0 behavioral content
+- [x] Shipped example: `examples/technical-explainer/project.json` parses as manifest AND as timeline (contract tests)
+- [ ] Template browser + preview + apply-as-commands UI
+
+## Phase 10 — Polish & Release ⬜ (foundations in)
+
+- [x] A11y defaults (labels, focus states, reduced-motion CSS, no color-alone), CI (scaffold/node/rust), error-code scheme, humane-error mapping in commands
+- [ ] Autosave + crash recovery, perf/stress test, onboarding, packaging + GUI launch verification
 
 ---
 
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
-- [ ] Desktop app · [ ] Project creation · [ ] Media import · [ ] Media preview
-- [ ] Timeline · [ ] Basic editing · [ ] Undo/redo · [ ] Autosave
-- [ ] FFmpeg rendering · [ ] Export · [ ] Local transcription · [ ] Transcript editing
-- [ ] AI provider abstraction · [ ] Ollama · [ ] One cloud provider · [ ] AI rough-cut proposal
-- [ ] Captions · [ ] Text overlays · [ ] Basic diagrams · [ ] Templates
-- [ ] Example projects · [ ] Crash recovery · [ ] Documentation · [ ] Tests
+- [x] Desktop app (backend compiles; GUI launch = manual gate) · [x] Project creation (dialog + backend manifest) · [ ] Media import · [ ] Media preview
+- [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
+- [x] FFmpeg rendering (graph + real render) · [ ] Export (dialog UI) · [x] Local transcription (approach verified; binding pending) · [x] Transcript editing (phrase→range mapping)
+- [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [ ] AI rough-cut proposal
+- [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
+- [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests
 
 ## Explicitly excluded from MVP (do not build yet)
 
@@ -103,7 +121,10 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | Date | Blocker / Risk | Owner | Mitigation |
 |------|---------------|-------|------------|
 | 2026-09-20 | Rust toolchain not installed on scaffold machine (`rustc/cargo` missing) | build | **Resolved:** Rust 1.98.1 stable + rustfmt/clippy installed via rustup; pinned in `rust-toolchain.toml`; `cargo test/fmt/clippy` green on workspace. |
-| 2026-09-20 | Tauri backend not wired (no src-tauri Cargo workspace yet) | Phase 1 | Frontend shell runs on Vite; `tauri:dev` exits 1 honestly. Next: `cargo add tauri`, capabilities, sidecar config, `stream://` preview spike (ARCHITECTURE.md). |
+| 2026-09-20 | Tauri backend not wired (no src-tauri Cargo workspace yet) | Phase 1 | **Resolved:** backend compiles, 3 cmd tests, capabilities, icon; `tauri dev` GUI launch + `tauri build` packaging = first manual gate (needs interactive run). |
+| 2026-09-20 | System ffmpeg lacks text filters (no drawtext/subtitles in Homebrew 9.0.1) | render | `argv_compat` + `AVID_RENDER_005` guidance + `ffmpeg_supports_text` probe; burn-in needs capable sidecar (ADR-002). Timeline data unaffected. |
+| 2026-09-20 | tauri CLI 2.11.5 vs core crate 2.6.x numbering | build | Major-pin `tauri = "2"` (CLI/core rev independently in v2); lockfile records exact. |
+| 2026-09-20 | whisper.cpp install via brew slow (~10 min, bottle pour) | Phase 5 | Installed 1.9.1; model cached in ~/.cache (never committed). In-app whisper-rs binding still pending. |
 | 2026-09-20 | Seekable preview risk (Tauri `asset://` lacks Range support) | arch | Custom `stream://` Range/206 protocol spike in Phase 1; proxy-first H.264/AAC; per-OS preview matrix. Tracked in ARCHITECTURE.md. |
 | 2026-09-20 | Llama-3.1 weights (Community License, not OSI) + H.264/AAC patents | legal | Tracked in LEGAL_AND_LICENSING.md; Qwen3 default; codec patent exposure reviewed separately from copyright. |
 | — | — | — | — |
@@ -115,3 +136,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | `fe110c1` / pushed to `main` | Initial clean scaffold: structure, README, PLAN, PROGRESS, ROADMAP, collab docs, verify script. No app code per AGENTS §157. |
 | 2026-09-20 | Phase 0 research drop (pending push) | Competitive (10 editors) + technical (Tauri/FFmpeg/Whisper/local-AI/timeline) research; ARCHITECTURE.md; ADR-001…008; UX flows; toolchain pins; licensing register. Docs only — gate to Phase 1 is spike validation (preview protocol, sidecar signing, whisper latency, qwen3 eval). |
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
+| 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |

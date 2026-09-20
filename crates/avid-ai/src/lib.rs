@@ -125,6 +125,10 @@ impl ProviderRegistry {
     }
 }
 
+pub mod transcript;
+
+pub use transcript::{Segment as TranscriptSegment, Transcript, Word as TranscriptWord};
+
 /// Minimal HTTP transport (mockable in tests).
 pub trait HttpTransport {
     /// POST a JSON body; return `(status_code, body)`.

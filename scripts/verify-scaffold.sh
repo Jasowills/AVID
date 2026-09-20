@@ -26,6 +26,14 @@ required_files=(
   "apps/desktop/src/pages/Settings.tsx" "apps/desktop/src/project.test.ts"
   "packages/shared-types/src/index.ts" "packages/design-system/src/index.ts"
   "packages/ui/src/index.ts" "packages/ui/src/Button.tsx"
+  "packages/ai-protocol/src/index.ts" "packages/ai-protocol/src/protocol.test.ts"
+  "packages/templates/src/index.ts" "packages/templates/src/templates.test.ts"
+  "apps/desktop/src-tauri/Cargo.toml" "apps/desktop/src-tauri/build.rs"
+  "apps/desktop/src-tauri/src/main.rs" "apps/desktop/src-tauri/src/commands.rs"
+  "apps/desktop/src-tauri/capabilities/main.json" "apps/desktop/src-tauri/tauri.conf.json"
+  "apps/desktop/src-tauri/icons/icon.png"
+  "crates/avid-ai/src/transcript.rs" "examples/technical-explainer/project.json"
+  "scripts/make-fixtures.sh" "scripts/verify-transcription.sh"
 )
 required_dirs=(
   "apps/desktop/src" "apps/desktop/src-tauri"
