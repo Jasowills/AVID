@@ -126,8 +126,10 @@ impl ProviderRegistry {
 }
 
 pub mod transcript;
+pub mod whisper;
 
 pub use transcript::{Segment as TranscriptSegment, Transcript, Word as TranscriptWord};
+pub use whisper::{transcribe_wav, TranscribeError};
 
 /// Minimal HTTP transport (mockable in tests).
 pub trait HttpTransport {
