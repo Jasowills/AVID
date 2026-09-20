@@ -18,6 +18,14 @@ required_files=(
   "docs/decisions/ADR-003-project-format.md" "docs/decisions/ADR-004-timeline-model.md"
   "docs/decisions/ADR-005-ai-provider-abstraction.md" "docs/decisions/ADR-006-rendering-architecture.md"
   "docs/decisions/ADR-007-local-first-ai.md" "docs/decisions/ADR-008-command-based-editing.md"
+  "apps/desktop/vite.config.ts" "apps/desktop/tsconfig.json" "apps/desktop/index.html"
+  "apps/desktop/src/main.tsx" "apps/desktop/src/App.tsx" "apps/desktop/src/index.css"
+  "apps/desktop/src/lib/project.ts" "apps/desktop/src/stores/useProjectStore.ts"
+  "apps/desktop/src/components/TopBar.tsx" "apps/desktop/src/pages/Home.tsx"
+  "apps/desktop/src/pages/NewProject.tsx" "apps/desktop/src/pages/Editor.tsx"
+  "apps/desktop/src/pages/Settings.tsx" "apps/desktop/src/project.test.ts"
+  "packages/shared-types/src/index.ts" "packages/design-system/src/index.ts"
+  "packages/ui/src/index.ts" "packages/ui/src/Button.tsx"
 )
 required_dirs=(
   "apps/desktop/src" "apps/desktop/src-tauri"

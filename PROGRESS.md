@@ -3,8 +3,8 @@
 > Living document. Updated in the same commit as the work. Never mark complete without meeting AGENTS §135 (Definition of Done). No fake completion (AGENTS §136).
 > Legend: `✅ done` · `🚧 in progress` · `⬜ not started` · `⛔ blocked`
 
-**Current phase:** Phase 0 — Research & Architecture (research complete, gate review next)
-**Last updated:** 2026-09-20 — Phase 0 research + architecture + ADRs + UX + licensing (docs only, no code per §124)
+**Current phase:** Phase 1 — Desktop Shell (shell wired, Tauri backend pending)
+**Last updated:** 2026-09-20 — Phase 1 frontend shell: Vite+React+TS+Tailwind+Zustand, tokens, routing, project creation, top bar, editor shell (typecheck/build/5 tests green; Rust toolchain installed, workspace green)
 **Branch:** `main` · **Remote:** `https://github.com/Jasowills/AVID`
 
 ---
@@ -22,15 +22,15 @@
 | 0.7 | Dev env + CI skeleton | 🚧 | `rust-toolchain.toml` + `.nvmrc` added; exact version lockfile pins land in Phase 1 (needs Rust toolchain on build machine — see blockers) |
 | 0.8 | Risk register + licensing | ✅ | `docs/LEGAL_AND_LICENSING.md` — per-dependency table with status; top risks in ARCHITECTURE.md + table below |
 
-## Phase 1 — Desktop Shell ⬜
+## Phase 1 — Desktop Shell 🚧
 
-| ID | Deliverable | Status | Notes |
-|----|-------------|--------|-------|
-| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | ⬜ | Pinned versions, `tauri dev` runs |
-| 1.2 | Design system tokens + components | ⬜ | Colors/type/spacing/radius/buttons/inputs/panels/dialogs/toasts |
-| 1.3 | Routing: home / new-project / editor / settings | ⬜ | — |
-| 1.4 | Project creation dialog | ⬜ | Name, canvas, fps, resolution, template-optional |
-| 1.5 | Top bar (undo/redo/save/AI status/export) | ⬜ | Non-functional export stub must be labeled as such |
+| ID | Deliverable | Status | Evidence / Notes |
+|----|-------------|--------|------------------|
+| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | 🚧 | React 18 + TS 5 + Tailwind v4 + Zustand 5 + Vite 6.4.3 + router 7 wired; `dev`/`build`/`typecheck`/`test` green. **Tauri backend NOT wired** — `tauri:dev` exits 1 by design until src-tauri Cargo workspace + sidecars exist |
+| 1.2 | Design system tokens + components | ✅ | `packages/design-system` tokens (dark-first) + Tailwind `@theme` mirror; `packages/ui` Button/Panel/TextField/EmptyState, accessible defaults |
+| 1.3 | Routing: home / new-project / editor / settings | ✅ | HashRouter (file:// + webview safe); `App.tsx` route map |
+| 1.4 | Project creation dialog | ✅ | Validated form (name/canvas/fps/resolution), pure validation fns under `vitest` (5 tests); persists to localStorage **interim** — `ProjectConfig` shape is manifest-compatible for the ADR-003 migration |
+| 1.5 | Top bar (undo/redo/save/AI status/export) | ✅ | Renders per AGENTS §39; undo/redo/export/preview-quality render **disabled with honest phase-titles** (no fake buttons, §136) |
 
 ## Phase 2 — Media Foundation ⬜
 
@@ -102,7 +102,8 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 
 | Date | Blocker / Risk | Owner | Mitigation |
 |------|---------------|-------|------------|
-| 2026-09-20 | Rust toolchain not installed on scaffold machine (`rustc/cargo` missing) | build | Phase 1 must install/pin toolchain from `rust-toolchain.toml`; CI installs it; do not assume local Rust. Still open. |
+| 2026-09-20 | Rust toolchain not installed on scaffold machine (`rustc/cargo` missing) | build | **Resolved:** Rust 1.98.1 stable + rustfmt/clippy installed via rustup; pinned in `rust-toolchain.toml`; `cargo test/fmt/clippy` green on workspace. |
+| 2026-09-20 | Tauri backend not wired (no src-tauri Cargo workspace yet) | Phase 1 | Frontend shell runs on Vite; `tauri:dev` exits 1 honestly. Next: `cargo add tauri`, capabilities, sidecar config, `stream://` preview spike (ARCHITECTURE.md). |
 | 2026-09-20 | Seekable preview risk (Tauri `asset://` lacks Range support) | arch | Custom `stream://` Range/206 protocol spike in Phase 1; proxy-first H.264/AAC; per-OS preview matrix. Tracked in ARCHITECTURE.md. |
 | 2026-09-20 | Llama-3.1 weights (Community License, not OSI) + H.264/AAC patents | legal | Tracked in LEGAL_AND_LICENSING.md; Qwen3 default; codec patent exposure reviewed separately from copyright. |
 | — | — | — | — |
@@ -113,3 +114,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 |------|--------|--------------|
 | 2026-09-20 | `fe110c1` / pushed to `main` | Initial clean scaffold: structure, README, PLAN, PROGRESS, ROADMAP, collab docs, verify script. No app code per AGENTS §157. |
 | 2026-09-20 | Phase 0 research drop (pending push) | Competitive (10 editors) + technical (Tauri/FFmpeg/Whisper/local-AI/timeline) research; ARCHITECTURE.md; ADR-001…008; UX flows; toolchain pins; licensing register. Docs only — gate to Phase 1 is spike validation (preview protocol, sidecar signing, whisper latency, qwen3 eval). |
+| 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
