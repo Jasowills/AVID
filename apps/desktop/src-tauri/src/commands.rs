@@ -859,6 +859,12 @@ pub async fn render_export(
     outcome
 }
 
+/// List imported assets for the media library UI.
+#[tauri::command]
+pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>, CommandError> {
+    state.with_session(|session| Ok(session.manifest().assets.clone()))
+}
+
 /// List all known jobs for the job-center UI (newest last).
 #[tauri::command]
 pub fn list_jobs(state: State<'_, crate::AppState>) -> Vec<crate::jobs::JobRecord> {

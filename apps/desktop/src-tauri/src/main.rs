@@ -79,6 +79,7 @@ fn main() {
             commands::open_project,
             commands::list_projects,
             commands::import_media,
+            commands::list_assets,
             commands::transcribe_media,
             commands::probe_media,
             commands::speech_model_status,
