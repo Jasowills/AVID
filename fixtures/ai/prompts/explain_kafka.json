@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "goal": "test",
+  "note": "Eval fixture: concept-visualization prompt with the expected operation shape.",
+  "prompt": "Kafka has three partitions and each consumer in a group processes different partitions.",
+  "expected": {
+    "operations": [
+      {
+        "type": "add_visual",
+        "visualType": "diagram",
+        "concept": "kafka-consumer-groups"
+      }
+    ]
+  }
+}

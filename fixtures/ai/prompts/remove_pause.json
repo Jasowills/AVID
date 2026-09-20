@@ -1,6 +1,9 @@
 {
   "version": 1,
-  "goal": "scaffold_example",
-  "note": "Placeholder eval prompt. Real AI eval dataset lands in Phase 7 (AGENTS §99).",
-  "operations": []
+  "goal": "test",
+  "note": "Eval fixture: silence-removal prompt with the expected operation shape. Full eval dataset (AGENTS §99) runs per provider in Phase 7.",
+  "prompt": "Remove the silence from 10 to 15 seconds.",
+  "expected": {
+    "operations": [{ "type": "remove_range", "start": 10, "end": 15, "reason": "silence" }]
+  }
 }

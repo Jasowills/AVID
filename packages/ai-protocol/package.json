@@ -1,8 +1,16 @@
 {
   "name": "@avid/ai-protocol",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "description": "AVID edit-plan + visual-scene JSON schemas and validators (Phase 7/8)."
+  "description": "AVID edit-plan + visual-scene JSON schemas and validators (ADR-008 gate).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
 }

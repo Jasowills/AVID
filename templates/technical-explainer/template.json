@@ -1,8 +1,17 @@
 {
   "name": "technical-explainer",
-  "version": "0.0.0",
-  "description": "Scaffold placeholder. Full template lands in Phase 9 (AGENTS §31-34).",
+  "version": "0.1.0",
+  "description": "Fast-paced technical explainer: talking head with automatic captions, concept detection, diagram insertion, code highlights, and chapter cards.",
   "category": "education",
   "aspectRatios": ["16:9"],
-  "status": "scaffold"
+  "supportedFeatures": ["captions", "diagrams", "code-visuals", "chapters", "rough-cut"],
+  "requiredAssets": [],
+  "rules": {
+    "captions": { "style": "bold-keywords", "position": "bottom-center", "wordHighlight": true },
+    "visuals": {
+      "preferDiagramsFor": ["architecture", "data-flow", "comparisons", "sequences", "pipelines"],
+      "maxPerMinute": 3
+    },
+    "pacing": { "targetCutSeconds": [4, 12], "removeFillers": true }
+  }
 }
