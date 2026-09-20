@@ -10,9 +10,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "tauri:dev": "echo 'Tauri backend not wired yet (needs src-tauri Cargo workspace + sidecars). Web shell only.' && exit 1"
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@avid/ai-protocol": "^0.1.0",
     "@avid/design-system": "0.0.0",
     "@avid/shared-types": "0.0.0",
     "@avid/ui": "0.0.0",

@@ -26,7 +26,7 @@
 
 | ID | Deliverable | Status | Evidence / Notes |
 |----|-------------|--------|------------------|
-| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | ✅ | Backend crate compiles (`cargo check`); commands `get_app_info/create_project/probe_media` + 3 cmd tests; capabilities least-privilege; frontend IPC client + 3 tests. **Not verified headless:** `tauri dev` GUI launch + packaged `tauri build` (needs interactive run — first manual gate) |
+| 1.1 | Tauri 2.x + React + TS + Tailwind + Zustand wired | ✅ | Backend compiles + dev binary launches and stays resident error-free (`tauri dev` full cycle: Vite 506 ms + backend 19.68 s). Commands + 5 cmd tests; capabilities least-privilege; IPC client + 3 tests. **Pixel-level GUI check needs a console session** (headless `screencapture` unavailable) — run `npm run tauri:dev` and click through on wake-up |
 | 1.2 | Design system tokens + components | ✅ | `packages/design-system` tokens (dark-first) + Tailwind `@theme` mirror; `packages/ui` Button/Panel/TextField/EmptyState, accessible defaults |
 | 1.3 | Routing: home / new-project / editor / settings | ✅ | HashRouter (file:// + webview safe); `App.tsx` route map |
 | 1.4 | Project creation dialog | ✅ | Validated form + backend `create_project` (manifest round-trips through its own parser); frontend persists to localStorage **interim** until Tauri save path lands |
@@ -66,11 +66,12 @@
 - [ ] Local Whisper + word timings/speakers/confidence
 - [ ] Transcript↔timeline mapping + panel + text-based delete
 
-## Phase 5 — Transcription 🚧 (approach verified real, in-app binding pending)
+## Phase 5 — Transcription ✅ (core loop real, panel UI pending)
 
-- [x] Approach verified END-TO-END: `say` synthesis → ffmpeg 16 kHz mono → whisper.cpp 1.9.1 `tiny.en` → exact transcript + 14 ordered word-segments (`scripts/verify-transcription.sh` rerunnable)
+- [x] In-app `whisper-rs` binding (`transcribe_wav`, 16 kHz mono gate, greedy deterministic) + REAL in-process test (synthesized speech → "kafka"+"partitions" in 5.5 s)
+- [x] Rerunnable sidecar verification (`scripts/verify-transcription.sh`): exact transcript + 14 ordered word-segments
 - [x] Transcript model + whisper-JSON parser + phrase→range mapping for text-based delete (7 tests, real output shape)
-- [ ] In-app whisper-rs binding + transcript panel + VAD chunking + speaker labels
+- [ ] Transcript panel UI + VAD chunking + speaker labels + model auto-download UX
 
 ## Phase 6 — AI Runtime 🚧 (local real, cloud/config UI pending)
 
@@ -103,9 +104,9 @@
 
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
-- [x] Desktop app (backend compiles; GUI launch = manual gate) · [x] Project creation (dialog + backend manifest) · [ ] Media import · [ ] Media preview
+- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + `save_project` to disk) · [ ] Media import · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
-- [x] FFmpeg rendering (graph + real render) · [ ] Export (dialog UI) · [x] Local transcription (approach verified; binding pending) · [x] Transcript editing (phrase→range mapping)
+- [x] FFmpeg rendering (graph + real render) · [ ] Export (dialog UI) · [x] Local transcription (in-app binding + real test) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [ ] AI rough-cut proposal
 - [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
 - [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests
@@ -137,3 +138,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | Phase 0 research drop (pending push) | Competitive (10 editors) + technical (Tauri/FFmpeg/Whisper/local-AI/timeline) research; ARCHITECTURE.md; ADR-001…008; UX flows; toolchain pins; licensing register. Docs only — gate to Phase 1 is spike validation (preview protocol, sidecar signing, whisper latency, qwen3 eval). |
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
 | 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |
+| 2026-09-20 | Autopilot pass 2 (pending push) | In-app whisper-rs binding + REAL in-process transcription test · `save_project` command + disk round-trip tests · Media probe panel + AI plan-check panel (10 desktop tests) · `tauri dev` full cycle (Vite + backend 19.68 s, binary resident error-free; pixel check needs console session) · `tauri:dev` script wired. |

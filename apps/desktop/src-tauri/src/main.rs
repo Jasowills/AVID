@@ -36,6 +36,7 @@ fn main() {
             commands::get_app_info,
             commands::create_project,
             commands::probe_media,
+            commands::save_project,
         ])
         .run(tauri::generate_context!())
         .expect("AVID backend failed to start");

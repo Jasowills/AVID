@@ -7,7 +7,7 @@ license = "MIT"
 [build-dependencies]
 # Major-pinned to 2.x (CLI and core rev independently within v2; 2.6.x is
 # current core). Lockfile records the exact resolved versions.
-tauri-build = "2"
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }

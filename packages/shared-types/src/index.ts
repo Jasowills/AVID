@@ -58,3 +58,22 @@ export interface AvidError {
   /** Expanded technical detail for the error UX disclosure. */
   detail?: string;
 }
+
+/** Probed stream metadata (mirrors `avid-media::StreamInfo`). */
+export interface StreamInfo {
+  index: number;
+  codec_type: string;
+  codec_name: string;
+  width: number | null;
+  height: number | null;
+  sample_rate: number | null;
+  channels: number | null;
+}
+
+/** Probed file metadata (mirrors `avid-media::MediaInfo`). */
+export interface MediaInfo {
+  duration: number | null;
+  format: string;
+  size: number | null;
+  streams: StreamInfo[];
+}

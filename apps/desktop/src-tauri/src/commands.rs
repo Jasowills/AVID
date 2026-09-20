@@ -139,6 +139,28 @@ pub fn probe_media_file(
         .map_err(CommandError::from)
 }
 
+/// Persist a validated manifest as `<directory>/project.json`.
+/// The directory is user-chosen (dialog) so absolute paths are expected —
+/// it must exist and be a directory. Pure helper; the command is a wrapper.
+pub fn save_project_to_dir(
+    manifest_json: &str,
+    directory: &Path,
+) -> Result<std::path::PathBuf, CommandError> {
+    let manifest = ProjectManifest::from_json(manifest_json)?;
+    if !directory.is_dir() {
+        return Err(CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: "Choose an existing folder to save the project in.".to_owned(),
+        });
+    }
+    let path = directory.join("project.json");
+    std::fs::write(&path, manifest.to_json()?).map_err(|e| CommandError {
+        code: "AVID_PROJECT_001".to_owned(),
+        message: format!("AVID couldn't write the project file: {e}"),
+    })?;
+    Ok(path)
+}
+
 #[tauri::command]
 #[must_use = "commands must be registered in the invoke handler"]
 pub fn get_app_info(state: tauri::State<'_, crate::AppState>) -> AppInfo {
@@ -168,6 +190,12 @@ pub fn probe_media(relative_path: String) -> Result<MediaInfo, CommandError> {
     // System binaries until the pinned sidecar ships (ADR-002).
     let engine = MediaEngine::system().map_err(CommandError::from)?;
     probe_media_file(&engine, &relative_path)
+}
+
+#[tauri::command]
+pub fn save_project(manifest_json: String, directory: String) -> Result<String, CommandError> {
+    save_project_to_dir(&manifest_json, Path::new(&directory))
+        .map(|path| path.display().to_string())
 }
 
 #[cfg(test)]
@@ -214,5 +242,29 @@ mod tests {
         let info = app_info(avid_project::MANIFEST_VERSION);
         assert_eq!(info.name, "AVID");
         assert_eq!(info.schema_version, avid_project::MANIFEST_VERSION);
+    }
+
+    #[test]
+    fn save_round_trips_through_disk() {
+        let manifest =
+            create_project_manifest(input("Disk"), "id-9".to_owned(), "now".to_owned()).unwrap();
+        let json = manifest.to_json().unwrap();
+        let dir = std::env::temp_dir().join("avid-save-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = save_project_to_dir(&json, &dir).unwrap();
+        assert_eq!(path, dir.join("project.json"));
+        let back = ProjectManifest::from_json(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(manifest, back);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_rejects_bad_manifest_and_missing_dir() {
+        let dir = std::env::temp_dir().join("avid-save-test-missing");
+        std::fs::remove_dir_all(&dir).ok();
+        let manifest =
+            create_project_manifest(input("Disk"), "id-9".to_owned(), "now".to_owned()).unwrap();
+        assert!(save_project_to_dir(&manifest.to_json().unwrap(), &dir).is_err());
+        assert!(save_project_to_dir("{nope", &std::env::temp_dir()).is_err());
     }
 }
