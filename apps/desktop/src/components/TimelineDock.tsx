@@ -7,11 +7,19 @@ import { TimelineCanvas } from "./TimelineCanvas";
 /**
  * Timeline dock (Phase 3 UI slice): live backend timeline with select,
  * split-at-middle, remove, undo, and redo. Every mutation round-trips
- * through the command engine and autosaves `project.json`.
+ * through the command engine and autosaves `project.json`. Selection is
+ * owned by the parent so the inspector shares it.
  */
-export function TimelineDock({ projectId }: { projectId: string }) {
+export function TimelineDock({
+  projectId,
+  selectedId,
+  onSelect,
+}: {
+  projectId: string;
+  selectedId: string | null;
+  onSelect: (clipId: string | null) => void;
+}) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const backend = isTauri();
@@ -27,7 +35,7 @@ export function TimelineDock({ projectId }: { projectId: string }) {
   }, []);
 
   useEffect(() => {
-    setSelectedId(null);
+    onSelect(null);
     refresh();
   }, [refresh, projectId]);
 
@@ -45,7 +53,7 @@ export function TimelineDock({ projectId }: { projectId: string }) {
       } else {
         setNotice(null);
       }
-      setSelectedId(null);
+      onSelect(null);
       await refresh();
     } catch (e) {
       setNotice(e instanceof IpcError ? e.message : `${label} failed unexpectedly.`);
@@ -109,7 +117,7 @@ export function TimelineDock({ projectId }: { projectId: string }) {
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-avid-md border border-avid-border-subtle">
         {timeline ? (
-          <TimelineCanvas timeline={timeline} selectedId={selectedId} onSelect={setSelectedId} />
+          <TimelineCanvas timeline={timeline} selectedId={selectedId} onSelect={onSelect} />
         ) : (
           <div className="flex h-full items-center justify-center p-4">
             <p className="text-xs text-avid-muted">

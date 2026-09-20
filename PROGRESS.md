@@ -49,9 +49,9 @@
 - [x] Model: tracks/clips with all §13 fields, overlap validation, locked tracks
 - [x] Commands: Add/Remove/Trim/Move/Split with execute/undo/redo/serialize (18 tests, clippy pedantic, fmt)
 - [x] Grouped + transactional undo (`UndoStack`, manual groups, single-label AI undo)
-- [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved)
+- [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved) + inspector trim form
 - [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
-- [ ] Trim/drag interactions, zoom, snapping, shortcuts, markers
+- [ ] Drag/zoom/snapping, markers, shortcuts
 
 ## Phase 4 — Rendering & Export ✅ (render + export real, preview pending)
 
@@ -71,11 +71,14 @@
 - [x] Model auto-download (`ensure_speech_model` async command + `speech_model_status`; default tiny.en 77 MB to app cache)
 - [ ] VAD chunking + speaker labels
 
-## Phase 6 — AI Runtime 🚧 (local real, cloud/config UI pending)
+## Phase 6 — AI Runtime 🚧 (local + cloud-shape real, keys/UX done, usage live)
 
 - [x] Registry (local-first recommend) + canonical OpenAI-shape adapter + structured-output probe + mock tests
 - [x] LIVE eval vs local Ollama `qwen2.5:7b`: probe + edit-plan with operations (38 s) — ADR-005 path proven
-- [ ] LM Studio/generic-compat/OpenAI-cloud adapters (same shape, untested without targets/keys) + provider config UI + connection test + cloud consent
+- [x] Cloud auth: optional Bearer key (blank = local, never sent to local endpoints — tested both directions)
+- [x] `probe_provider` command (URL hygiene + reachability reported, not thrown; tested incl. unreachable + bad URLs)
+- [x] Provider settings UI (endpoint/model/key, Local/Cloud badge, live test, key never persisted — interim localStorage holds URL/model only)
+- [ ] LM Studio/generic-compat beyond shape (same adapter, untested without targets)
 
 ## Phase 7 — AI Editing ✅ (detectors + proposal + apply real; advanced pacing later)
 
@@ -109,7 +112,7 @@
 - [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
 - [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
-- [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [x] AI rough-cut proposal (detectors + proposal + review + apply)
+- [x] AI provider abstraction · [x] Ollama (live eval) · [x] One cloud provider (shape + auth + probe; live call needs a key) · [x] AI rough-cut proposal (detectors + proposal + review + apply)
 - [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
 - [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests
 

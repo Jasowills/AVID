@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { EmptyState, Panel } from "@avid/ui";
+import { EmptyState } from "@avid/ui";
 import { Button } from "@avid/ui";
 import { AiPanel } from "../components/AiPanel";
 import { ExportDialog } from "../components/ExportDialog";
+import { InspectorPanel } from "../components/InspectorPanel";
 import { JobsPanel } from "../components/JobsPanel";
 import { MediaPanel } from "../components/MediaPanel";
 import { isTauri } from "../lib/ipc";
@@ -29,6 +30,7 @@ export function Editor() {
   const [tab, setTab] = useState<ActiveTab>("Media");
   const [exportOpen, setExportOpen] = useState(false);
   const [transcriptAssetId, setTranscriptAssetId] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) openProject(id);
@@ -114,22 +116,7 @@ export function Editor() {
         </section>
 
         <aside className="min-h-0 overflow-y-auto bg-avid-base p-2" aria-label="Inspector">
-          <Panel title="Inspector">
-            <dl className="flex flex-col gap-1 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-avid-muted">Project</dt>
-                <dd className="text-avid-primary">{project.name}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-avid-muted">Canvas</dt>
-                <dd className="text-avid-primary">{project.canvas}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-avid-muted">Timeline</dt>
-                <dd className="text-avid-muted">Phase 3</dd>
-              </div>
-            </dl>
-          </Panel>
+          <InspectorPanel clipId={selectedId} />
         </aside>
       </div>
 
@@ -137,7 +124,7 @@ export function Editor() {
         className="h-56 shrink-0 border-t border-avid-border bg-avid-panel p-2"
         aria-label="Timeline"
       >
-        <TimelineDock projectId={project.id} />
+        <TimelineDock projectId={project.id} selectedId={selectedId} onSelect={setSelectedId} />
       </footer>
     </div>
   );
