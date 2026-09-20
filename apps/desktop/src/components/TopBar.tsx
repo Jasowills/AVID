@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { selectOpenProject, useProjectStore } from "../stores/useProjectStore";
+import { runningCount, useJobsStore } from "../stores/useJobsStore";
+import { useEffect } from "react";
 
 export interface TopBarProps {
   /** "Saved · 12:04" style status. Autosave indicator lands in Phase 3. */
@@ -16,6 +18,13 @@ export interface TopBarProps {
 export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) {
   const navigate = useNavigate();
   const project = useProjectStore(selectOpenProject);
+  const jobs = useJobsStore((s) => s.jobs);
+  const startPolling = useJobsStore((s) => s.startPolling);
+  const running = runningCount(jobs);
+
+  useEffect(() => {
+    startPolling();
+  }, [startPolling]);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-avid-border bg-avid-panel px-4">
@@ -48,6 +57,16 @@ export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) 
       </div>
 
       <span className="text-xs text-avid-muted">{saveStatus}</span>
+
+      {running > 0 && (
+        <span
+          className="rounded-full bg-avid-accent-muted px-2 py-0.5 text-xs text-avid-primary"
+          role="status"
+          aria-label={`${running} background tasks running`}
+        >
+          {running} task{running === 1 ? "" : "s"}
+        </span>
+      )}
 
       <div className="ml-auto flex items-center gap-3">
         <span

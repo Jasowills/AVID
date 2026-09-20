@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Channel } from "@tauri-apps/api/core";
 import { Button, EmptyState, Panel, TextField } from "@avid/ui";
-import type { ModelStatus, Transcript } from "@avid/shared-types";
+import type { JobEvent, ModelStatus, Transcript } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
 
 /**
@@ -28,7 +29,11 @@ export function TranscriptPanel() {
     setTranscript(null);
     setActive(null);
     try {
+      // Registered as a job (visible + cancellable in the Jobs tab);
+      // progress here is indeterminate, the spinner covers it honestly.
+      const channel = new Channel<JobEvent>(() => undefined);
       const result = await invokeCommand<Transcript>("transcribe_media", {
+        channel,
         assetId: assetId.trim(),
         language: "en",
       });

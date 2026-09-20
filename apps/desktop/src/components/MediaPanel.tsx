@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { MediaInfo } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
+import { notifyTimelineChanged } from "../stores/useJobsStore";
 
 export interface ImportedAsset {
   id: string;
@@ -59,6 +60,7 @@ export function MediaPanel() {
         sourcePath: source.trim(),
       });
       setImported(asset);
+      notifyTimelineChanged();
     } catch (e) {
       setImportError(e instanceof IpcError ? e.message : "Import failed unexpectedly.");
     } finally {

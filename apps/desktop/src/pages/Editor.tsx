@@ -4,6 +4,7 @@ import { EmptyState, Panel } from "@avid/ui";
 import { Button } from "@avid/ui";
 import { AiPanel } from "../components/AiPanel";
 import { ExportDialog } from "../components/ExportDialog";
+import { JobsPanel } from "../components/JobsPanel";
 import { MediaPanel } from "../components/MediaPanel";
 import { isTauri } from "../lib/ipc";
 import { TimelineDock } from "../components/TimelineDock";
@@ -16,7 +17,7 @@ import { useProjectStore } from "../stores/useProjectStore";
  * Media ingestion (Phase 2), timeline engine (Phase 3), and AI (Phase 6+)
  * plug into the placeholder regions below. Empty states guide, per §57.
  */
-const ACTIVE_TABS = ["Media", "Transcript", "AI"] as const;
+const ACTIVE_TABS = ["Media", "Transcript", "AI", "Jobs"] as const;
 type ActiveTab = (typeof ACTIVE_TABS)[number];
 const COMING_TABS = ["Scenes", "Templates", "Assets", "Audio", "Captions"] as const;
 
@@ -85,8 +86,10 @@ export function Editor() {
             <MediaPanel />
           ) : tab === "Transcript" ? (
             <TranscriptPanel />
-          ) : (
+          ) : tab === "AI" ? (
             <AiPanel />
+          ) : (
+            <JobsPanel />
           )}
         </aside>
 

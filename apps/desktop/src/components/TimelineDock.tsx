@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Clip, Timeline } from "@avid/shared-types";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
+import { TIMELINE_CHANGED_EVENT } from "../stores/useJobsStore";
 import { TimelineCanvas } from "./TimelineCanvas";
 
 /**
@@ -29,6 +30,11 @@ export function TimelineDock({ projectId }: { projectId: string }) {
     setSelectedId(null);
     refresh();
   }, [refresh, projectId]);
+
+  useEffect(() => {
+    window.addEventListener(TIMELINE_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(TIMELINE_CHANGED_EVENT, refresh);
+  }, [refresh]);
 
   async function mutate(label: string, run: () => Promise<unknown>): Promise<void> {
     setBusy(true);

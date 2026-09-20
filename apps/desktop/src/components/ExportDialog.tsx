@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { EXPORT_PRESETS, type ExportResult, type Timeline } from "@avid/shared-types";
+import { Channel } from "@tauri-apps/api/core";
+import { EXPORT_PRESETS, type ExportResult, type JobEvent, type Timeline } from "@avid/shared-types";
 import { Button, Panel } from "@avid/ui";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 
@@ -20,6 +21,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const [filename, setFilename] = useState("avid-export.mp4");
   const [duration, setDuration] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
   const backend = isTauri();
@@ -47,16 +49,24 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   async function onExport(event: FormEvent): Promise<void> {
     event.preventDefault();
     setBusy(true);
+    setProgress(0);
     setError(null);
     setResult(null);
     try {
       const preset = EXPORT_PRESETS.find((p) => p.id === presetId);
-      const exported = await invokeCommand<ExportResult>("render_export", {
-        presetId,
-        customWidth: presetId === "custom" ? (preset?.width ?? null) : null,
-        customFps: presetId === "custom" ? (preset?.fps ?? null) : null,
-        filename: filename.trim(),
+      const channel = new Channel<JobEvent>((jobEvent) => {
+        if (jobEvent.progress !== null) setProgress(jobEvent.progress);
       });
+      const exported = await invokeCommand<ExportResult>("render_export", {
+        channel,
+        request: {
+          presetId,
+          customWidth: presetId === "custom" ? (preset?.width ?? null) : null,
+          customFps: presetId === "custom" ? (preset?.fps ?? null) : null,
+          filename: filename.trim(),
+        },
+      });
+      setProgress(1);
       setResult(exported);
     } catch (e) {
       setError(e instanceof IpcError ? e.message : "Export failed unexpectedly.");
@@ -134,6 +144,18 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   {busy ? "Rendering…" : "Export"}
                 </Button>
               </div>
+              {busy && progress !== null && (
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(progress * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Export progress"
+                  className="h-1.5 overflow-hidden rounded-full bg-avid-overlay"
+                >
+                  <div className="h-full bg-avid-accent" style={{ width: `${progress * 100}%` }} />
+                </div>
+              )}
             </form>
           )}
 

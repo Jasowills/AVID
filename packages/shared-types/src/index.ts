@@ -168,3 +168,40 @@ export interface ModelStatus {
   path: string;
   bytes: number | null;
 }
+
+/** Background job kind (mirrors the registry `JobKind`). */
+export type JobKind = "render" | "transcribe";
+
+/** Background job status (mirrors the registry `JobStatus`). */
+export type JobStatus = "running" | "finished" | "failed" | "cancelled";
+
+/** Job record for the job center (mirrors `list_jobs` output). */
+export interface JobRecord {
+  id: string;
+  kind: JobKind;
+  label: string;
+  status: JobStatus;
+  progress: number | null;
+  message: string | null;
+}
+
+/** Progress event streamed over a Channel (mirrors `JobEvent`). */
+export interface JobEvent {
+  job_id: string;
+  status: JobStatus;
+  progress: number | null;
+  message: string | null;
+}
+
+/** Per-operation apply outcome (mirrors `OpResult`). */
+export interface OpResult {
+  index: number;
+  applied: boolean;
+  message: string;
+}
+
+/** Grouped-apply report (mirrors `ApplyReport`). */
+export interface ApplyReport {
+  label: string;
+  results: OpResult[];
+}

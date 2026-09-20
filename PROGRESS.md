@@ -32,15 +32,16 @@
 | 1.4 | Project creation dialog | ✅ | Validated form + backend `create_project` (manifest round-trips through its own parser); frontend persists to localStorage **interim** until Tauri save path lands |
 | 1.5 | Top bar (undo/redo/save/AI status/export) | ✅ | Renders per AGENTS §39; unwired controls **disabled with honest phase-titles** (no fake buttons, §136) |
 
-## Phase 2 — Media Foundation 🚧 (engine + import real, library/playback pending)
+## Phase 2 — Media Foundation 🚧 (engine + import + jobs real; library/playback pending)
 
-- [x] MediaEngine: probe (REAL), `probe_file`/`extract_audio` runners, builders, progress parser, traversal guard
+- [x] MediaEngine: probe (REAL), `probe_file`/`extract_audio` runners, progress tracker + cancellable render runner, builders, traversal guard
 - [x] `import_media`: copy → probe → asset → auto-place first video on V1 (undoable) — LIVE-tested with fixture
 - [x] Media panel: probe form + import form wired to backend (14 desktop tests cover helpers)
+- [x] Job system: registry (start/progress/finish/fail/cancel/list) + Channel progress events + `cancel_job`; render streams real ffmpeg fractions, transcribe registers indeterminate jobs
+- [x] Job center UI: Jobs tab (progress bars, cancel, failure reasons) + top-bar running pill (shared polling store)
 - [x] Fixture generator (`scripts/make-fixtures.sh`): talking-head, silence, vertical, corrupt
 - [ ] Media library grid/list + search + thumbnails UI
 - [ ] Playback via proxies + proxy offer flow
-- [ ] Background jobs + job center (cancel/retry/errors)
 - [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
 ## Phase 3 — Timeline ✅ (engine + working UI; trim/drag pending)
@@ -76,10 +77,13 @@
 - [x] LIVE eval vs local Ollama `qwen2.5:7b`: probe + edit-plan with operations (38 s) — ADR-005 path proven
 - [ ] LM Studio/generic-compat/OpenAI-cloud adapters (same shape, untested without targets/keys) + provider config UI + connection test + cloud consent
 
-## Phase 7 — AI Editing 🚧 (validation real, detectors/diff UI pending)
+## Phase 7 — AI Editing 🚧 (validation + apply real, detectors pending)
 
 - [x] Edit-plan schema + validator (rejects prose/malformed/hallucinated/out-of-range, 9 tests) + eval fixtures
-- [ ] Silence/filler detectors → proposed rough cut + diff UI + transactional apply + snapshots
+- [x] `RemoveRangeCommand`: text-delete as one undoable transactional op (22 timeline tests)
+- [x] `apply_operations`: re-validate vs live state → single grouped undo (`AI: goal`) → per-op report; invalid ops reported, never applied
+- [x] AI panel: validate → per-op accept/reject → apply → results; visuals honestly deferred to Phase 8; timeline auto-refreshes
+- [ ] Silence/filler detectors → proposed rough cut (detection, not plumbing, is missing)
 
 ## Phase 8 — Visual Intelligence 🚧 (spec validation real, renderer UI pending)
 
