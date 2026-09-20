@@ -35,6 +35,9 @@ pub enum MediaError {
         /// Captured stderr (truncated).
         stderr: String,
     },
+    /// The operation was cancelled by the user (job center).
+    #[error("media operation '{0}' cancelled")]
+    Cancelled(&'static str),
     /// Output parsing failed (e.g. unexpected ffprobe JSON).
     #[error("could not parse media output: {0}")]
     Parse(String),
@@ -48,6 +51,7 @@ impl MediaError {
             Self::UnsafePath(_) => "AVID_MEDIA_001",
             Self::BinaryUnavailable(_) => "AVID_MEDIA_002",
             Self::ProcessFailed { .. } => "AVID_MEDIA_003",
+            Self::Cancelled(_) => "AVID_MEDIA_005",
             Self::Parse(_) => "AVID_MEDIA_004",
         }
     }
@@ -191,6 +195,47 @@ pub fn parse_progress_line(line: &str) -> Option<(u64, String)> {
         }
     }
     Some((time_us?, speed.unwrap_or("").to_owned()))
+}
+
+/// Stateful `-progress` tracker: `-progress pipe:1` emits one `key=value`
+/// per line (`out_time_us=…`, then `progress=continue|end`). Feed every
+/// stdout line; returns the 0–1 fraction on `progress=` lines.
+pub struct ProgressTracker {
+    total_us: u64,
+    last_us: u64,
+}
+
+impl ProgressTracker {
+    /// Create a tracker for a job of `total_seconds` output.
+    #[must_use]
+    pub fn new(total_seconds: f64) -> Self {
+        Self {
+            total_us: (total_seconds.max(0.0) * 1_000_000.0) as u64,
+            last_us: 0,
+        }
+    }
+
+    /// Feed one stdout line; `Some(fraction)` on `progress=` markers.
+    pub fn feed(&mut self, line: &str) -> Option<f64> {
+        let line = line.trim();
+        if let Some(value) = line.strip_prefix("out_time_us=") {
+            if let Ok(parsed) = value.trim().parse::<u64>() {
+                self.last_us = parsed;
+            }
+            return None;
+        }
+        if line.starts_with("progress=") {
+            if self.total_us == 0 {
+                return Some(1.0);
+            }
+            // Microsecond magnitudes: float conversion cannot lose meaningful
+            // precision for a 0–1 progress fraction.
+            #[allow(clippy::cast_precision_loss)]
+            let fraction = (self.last_us.min(self.total_us) as f64) / (self.total_us as f64);
+            return Some(fraction.min(1.0));
+        }
+        None
+    }
 }
 
 /// The media engine: probe, proxy, thumbnails, waveform, audio extraction,
@@ -362,6 +407,66 @@ impl MediaEngine {
         self.run_ffmpeg("render", argv)
     }
 
+    /// Run a render with live progress: inserts `-progress pipe:1`, parses
+    /// `out_time_us` against `total_seconds`, and calls `on_progress` with
+    /// 0–1 fractions. Checks `should_cancel` between lines and kills the
+    /// child promptly (`Cancelled`, never a hung job).
+    pub fn run_render_with_progress(
+        &self,
+        argv: &[String],
+        total_seconds: f64,
+        should_cancel: &std::sync::atomic::AtomicBool,
+        on_progress: &dyn Fn(f64),
+    ) -> Result<(), MediaError> {
+        use std::io::BufRead;
+        use std::sync::atomic::Ordering;
+        let (binary, args) = argv
+            .split_first()
+            .ok_or_else(|| MediaError::ProcessFailed {
+                op: "render",
+                exit: "empty".to_owned(),
+                stderr: String::new(),
+            })?;
+        let mut full_args = vec!["-progress".to_owned(), "pipe:1".to_owned()];
+        full_args.extend(args.iter().cloned());
+        let mut child = std::process::Command::new(binary)
+            .args(&full_args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| MediaError::BinaryUnavailable(e.to_string()))?;
+        let mut tracker = ProgressTracker::new(total_seconds);
+        if let Some(stdout) = child.stdout.take() {
+            for line in std::io::BufReader::new(stdout).lines() {
+                if should_cancel.load(Ordering::Relaxed) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(MediaError::Cancelled("render"));
+                }
+                let Ok(line) = line else { break };
+                if let Some(fraction) = tracker.feed(&line) {
+                    on_progress(fraction);
+                }
+            }
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|e| MediaError::BinaryUnavailable(e.to_string()))?;
+        if output.status.success() {
+            on_progress(1.0);
+            Ok(())
+        } else {
+            Err(MediaError::ProcessFailed {
+                op: "render",
+                exit: output
+                    .status
+                    .code()
+                    .map_or("signal".to_owned(), |c| c.to_string()),
+                stderr: truncate(&String::from_utf8_lossy(&output.stderr)),
+            })
+        }
+    }
+
     /// Run 16 kHz mono WAV extraction (Whisper input). Paths are explicit
     /// (project dir + cache); the caller owns their validity.
     pub fn extract_audio(&self, input: &Path, output: &Path) -> Result<(), MediaError> {
@@ -466,6 +571,18 @@ mod tests {
         );
         assert_eq!(parse_progress_line(""), None);
         assert_eq!(parse_progress_line("frame=42"), None);
+    }
+
+    #[test]
+    fn tracker_reports_fractions_on_progress_markers() {
+        let mut tracker = ProgressTracker::new(10.0);
+        assert_eq!(tracker.feed("out_time_us=2500000"), None);
+        assert_eq!(tracker.feed("speed=2.5x"), None);
+        assert_eq!(tracker.feed("progress=continue"), Some(0.25));
+        assert_eq!(tracker.feed("out_time_us=20000000"), None);
+        assert_eq!(tracker.feed("progress=end"), Some(1.0));
+        let mut empty = ProgressTracker::new(0.0);
+        assert_eq!(empty.feed("progress=continue"), Some(1.0));
     }
 
     #[test]
