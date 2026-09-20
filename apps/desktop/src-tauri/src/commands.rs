@@ -520,7 +520,7 @@ pub async fn propose_rough_cut(
     })?;
     match &proposal {
         Ok(proposal) => {
-            jobs.finish(&job_id, &format!("{} cuts proposed.", proposal.cuts.len()));
+            jobs.finish(&job_id, format!("{} cuts proposed.", proposal.cuts.len()));
             event(JobStatus::Finished);
         }
         Err(error) => {
