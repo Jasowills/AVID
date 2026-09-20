@@ -477,6 +477,12 @@ impl MediaEngine {
         ]
     }
 
+    /// Run the 540p proxy transcode. Paths are explicit (project `media/`
+    /// source, project `proxies/` output); the caller owns their validity.
+    pub fn generate_proxy(&self, input: &Path, output: &Path) -> Result<(), MediaError> {
+        self.run_ffmpeg("proxy", &self.proxy_command(input, output))
+    }
+
     /// Build (not run) the single-frame extraction command.
     #[must_use]
     pub fn extract_frame_command(&self, input: &Path, seconds: f64, output: &Path) -> Vec<String> {

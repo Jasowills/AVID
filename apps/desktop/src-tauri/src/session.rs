@@ -279,6 +279,7 @@ impl Session {
             duration: info.duration,
             dimensions: video.and_then(|v| v.width.zip(v.height)),
             hash: None,
+            proxy_path: None,
         };
         self.manifest.assets.push(asset.clone());
         // First video import on empty V1 → place it (undoable, like any edit).
@@ -300,6 +301,75 @@ impl Session {
         }
         self.persist()?;
         Ok(asset)
+    }
+
+    /// Generate a 540p editing proxy for a video asset and record it.
+    /// Audio-only assets fail closed with guidance (nothing to preview).
+    /// Always regenerates (deterministic output for identical input).
+    pub fn generate_proxy(
+        &mut self,
+        engine: &MediaEngine,
+        asset_id: &str,
+    ) -> Result<MediaAsset, CommandError> {
+        let asset = self
+            .manifest
+            .assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        let dir = self.dir.clone();
+        Self::generate_proxy_file(engine, &dir, &asset)?;
+        self.set_proxy_path(&asset.id, format!("proxies/{}.mp4", asset.id))
+    }
+
+    /// Render the proxy file without touching session state, so async
+    /// commands can run it on a blocking thread. Returns the output path.
+    pub fn generate_proxy_file(
+        engine: &MediaEngine,
+        dir: &Path,
+        asset: &MediaAsset,
+    ) -> Result<PathBuf, CommandError> {
+        if asset.dimensions.is_none() {
+            return Err(CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Proxies are for video — audio files preview directly.".to_owned(),
+            });
+        }
+        let proxies = dir.join("proxies");
+        std::fs::create_dir_all(&proxies).map_err(|e| CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: format!("AVID couldn't prepare the proxies folder: {e}"),
+        })?;
+        let output = proxies.join(format!("{}.mp4", asset.id));
+        let source = dir.join(&asset.relative_path);
+        engine
+            .generate_proxy(&source, &output)
+            .map_err(|error| command_error_from_media(&error))?;
+        Ok(output)
+    }
+
+    /// Record a generated proxy path and persist.
+    pub fn set_proxy_path(
+        &mut self,
+        asset_id: &str,
+        relative_path: String,
+    ) -> Result<MediaAsset, CommandError> {
+        let index = self
+            .manifest
+            .assets
+            .iter()
+            .position(|asset| asset.id == asset_id)
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        self.manifest.assets[index].proxy_path = Some(relative_path);
+        self.persist()?;
+        Ok(self.manifest.assets[index].clone())
     }
 
     /// Transcribe an imported asset: extract 16 kHz mono audio, run the
@@ -575,6 +645,60 @@ mod tests {
         let loaded = Session::load(dir.clone()).unwrap();
         assert_eq!(loaded.timeline(), session.timeline());
         assert_eq!(loaded.manifest().id, "s1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn proxy_rejects_unknown_and_audio_only_assets() {
+        let Ok(engine) = MediaEngine::system() else {
+            return;
+        };
+        let dir = std::env::temp_dir().join("avid-proxy-invalid");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("px")).unwrap();
+        assert!(session.generate_proxy(&engine, "nope").is_err());
+        // Audio-only asset (no dimensions) fails closed with guidance.
+        session.manifest.assets.push(MediaAsset {
+            id: "audio-1".to_owned(),
+            file_name: "a.wav".to_owned(),
+            relative_path: "media/a.wav".to_owned(),
+            duration: Some(3.0),
+            dimensions: None,
+            hash: None,
+            proxy_path: None,
+        });
+        let err = session.generate_proxy(&engine, "audio-1").unwrap_err();
+        assert_eq!(err.code, "AVID_MEDIA_001");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// LIVE: generate a proxy from the talking-head fixture and verify it
+    /// is a smaller file with video dimensions. Ignored without fixtures.
+    #[test]
+    #[ignore]
+    fn live_proxy_generation_produces_small_preview() {
+        let engine = MediaEngine::system().expect("system ffmpeg/ffprobe");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/media/talkinghead_10s.mp4");
+        assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
+        let dir = std::env::temp_dir().join("avid-proxy-live");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("proxy-live")).unwrap();
+        let asset = session.import_file(&engine, &fixture).unwrap();
+        let proxied = session.generate_proxy(&engine, &asset.id).unwrap();
+        assert_eq!(
+            proxied.proxy_path,
+            Some(format!("proxies/{}.mp4", asset.id))
+        );
+        let proxy_file = dir.join(proxied.proxy_path.unwrap());
+        assert!(proxy_file.is_file());
+        let info = engine.probe_file(&proxy_file).unwrap();
+        let video = info.video_stream().expect("proxy has video");
+        assert!(video.width.unwrap_or(9999) <= 960, "proxy must be small");
+        assert!(
+            std::fs::metadata(&proxy_file).unwrap().len()
+                < std::fs::metadata(&fixture).unwrap().len()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

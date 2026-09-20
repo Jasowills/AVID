@@ -62,6 +62,10 @@ pub struct MediaAsset {
     /// BLAKE-level identity for relink matching is a Phase 2 concern;
     /// the field is reserved here so the schema doesn't break later.
     pub hash: Option<String>,
+    /// Project-relative proxy path (`proxies/<id>.mp4`), if generated.
+    /// Older manifests predate this field and load as `None` via default.
+    #[serde(default)]
+    pub proxy_path: Option<String>,
 }
 
 /// Project metadata (user-visible).

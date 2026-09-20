@@ -875,6 +875,58 @@ pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>,
     state.with_session(|session| Ok(session.manifest().assets.clone()))
 }
 
+/// Generate a 540p editing proxy for a video asset (async job with progress
+/// events; ffmpeg reports determinate progress like renders).
+#[tauri::command]
+pub async fn generate_proxy(
+    state: State<'_, crate::AppState>,
+    channel: tauri::ipc::Channel<crate::jobs::JobEvent>,
+    asset_id: String,
+) -> Result<MediaAsset, CommandError> {
+    use crate::jobs::{JobEvent, JobKind, JobStatus};
+    let snapshot = state.with_session(|session| {
+        let asset = session
+            .manifest()
+            .assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        Ok((session.dir().to_path_buf(), asset))
+    })?;
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    let jobs = state.jobs();
+    let (job_id, _cancel) = jobs.start(JobKind::Proxy, format!("Proxy {}", snapshot.1.file_name));
+    let event = |status: JobStatus, progress: Option<f32>| {
+        let _ = channel.send(JobEvent {
+            job_id: job_id.clone(),
+            status,
+            progress,
+            message: None,
+        });
+    };
+    event(JobStatus::Running, Some(0.0));
+    // Proxy progress: start/finish events (a single short ffmpeg pass).
+    let rendered = tokio::task::spawn_blocking(move || {
+        crate::session::Session::generate_proxy_file(&engine, &snapshot.0, &snapshot.1)?;
+        Ok::<_, CommandError>(snapshot.1.id.clone())
+    })
+    .await
+    .map_err(|e| CommandError {
+        code: "AVID_MEDIA_003".to_owned(),
+        message: format!("Proxy generation was interrupted: {e}"),
+    })??;
+    let stored = state.with_session(|session| {
+        session.set_proxy_path(&rendered, format!("proxies/{rendered}.mp4"))
+    })?;
+    jobs.finish(&job_id, "Proxy ready.");
+    event(JobStatus::Finished, Some(1.0));
+    Ok(stored)
+}
+
 /// Provider probe outcome for the Settings connection test (AGENTS §147).
 /// Reachability problems are reported IN the result (a test reports, it
 /// doesn't throw) — only malformed input is an error.

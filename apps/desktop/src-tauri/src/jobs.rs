@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 pub enum JobKind {
     Render,
     Transcribe,
+    Proxy,
 }
 
 /// Lifecycle state of a job.
