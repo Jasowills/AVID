@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::TimelineError;
 use crate::model::{Clip, Seconds, Timeline};
 
-/// A single reversible edit.
-pub trait EditCommand: Debug {
+/// A single reversible edit. Object-safe and `Send` so undo stacks can live
+/// in shared application state.
+pub trait EditCommand: Debug + Send {
     /// Stable name for undo labels, e.g. `"Trim clip"`.
     fn name(&self) -> &'static str;
     /// Apply the edit, capturing whatever state `undo` needs.
@@ -213,6 +214,115 @@ impl EditCommand for MoveClipCommand {
         candidate.track_id = track_id;
         timeline.validate_clip(&candidate, Some(&candidate.id))?;
         timeline.clips.insert(candidate.id.clone(), candidate);
+        Ok(())
+    }
+}
+
+/// Remove a timeline range across all tracks (text-based delete semantics).
+///
+/// Overlapping clips are split at the range boundaries and the interior
+/// pieces removed — one command, one undo step, transactional: a failure
+/// rolls back the splits already made. Ranges are validated against the
+/// live timeline by the caller (see `apply_operations`); this command
+/// re-checks cheaply and fails closed on drift.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RemoveRangeCommand {
+    /// Range start in seconds.
+    pub start: Seconds,
+    /// Range end in seconds (exclusive).
+    pub end: Seconds,
+    #[serde(skip)]
+    splits: Vec<SplitClipCommand>,
+    #[serde(skip)]
+    removed: Vec<Clip>,
+}
+
+impl RemoveRangeCommand {
+    /// Create a range removal. Rejects empty/inverted ranges immediately.
+    pub fn new(start: Seconds, end: Seconds) -> Result<Self, TimelineError> {
+        let ordered = start.partial_cmp(&end).unwrap_or(std::cmp::Ordering::Less);
+        if !start.is_finite()
+            || !end.is_finite()
+            || start < 0.0
+            || ordered != std::cmp::Ordering::Less
+        {
+            return Err(TimelineError::InvalidTime(format!("range {start}..{end}")));
+        }
+        Ok(Self {
+            start,
+            end,
+            splits: vec![],
+            removed: vec![],
+        })
+    }
+
+    /// Strictly-interior test with the model's abutment epsilon.
+    fn interior(position: Seconds, clip: &Clip) -> bool {
+        clip.start + 1e-9 < position && position < clip.end() - 1e-9
+    }
+}
+
+impl EditCommand for RemoveRangeCommand {
+    fn name(&self) -> &'static str {
+        "Remove range"
+    }
+
+    fn execute(&mut self, timeline: &mut Timeline) -> Result<(), TimelineError> {
+        self.splits.clear();
+        self.removed.clear();
+        // Snapshot overlapping clip ids first (the map mutates below).
+        let overlapping: Vec<String> = timeline
+            .clips
+            .values()
+            .filter(|clip| clip.start < self.end - 1e-9 && self.start < clip.end() - 1e-9)
+            .map(|clip| clip.id.clone())
+            .collect();
+        for id in overlapping {
+            // Split at the range start if interior; the piece right of the
+            // cut inherits `{id}-b` and is where the end cut may fall.
+            let mut right_id = id.clone();
+            let head = timeline
+                .clips
+                .get(&id)
+                .ok_or_else(|| TimelineError::ClipNotFound(id.clone()))?;
+            if Self::interior(self.start, head) {
+                let mut split = SplitClipCommand::new(id.clone(), self.start);
+                split.execute(timeline)?;
+                right_id = format!("{id}-b");
+                self.splits.push(split);
+            }
+            let piece = timeline
+                .clips
+                .get(&right_id)
+                .ok_or_else(|| TimelineError::ClipNotFound(right_id.clone()))?;
+            if Self::interior(self.end, piece) {
+                let mut split = SplitClipCommand::new(right_id, self.end);
+                split.execute(timeline)?;
+                self.splits.push(split);
+            }
+        }
+        // Remove pieces fully inside the range (re-check after splits).
+        // Boundary clips were split above, so merely abutting clips stay.
+        let inside: Vec<String> = timeline
+            .clips
+            .values()
+            .filter(|clip| self.start <= clip.start + 1e-9 && clip.end() <= self.end + 1e-9)
+            .map(|clip| clip.id.clone())
+            .collect();
+        for id in inside {
+            self.removed.push(timeline.take_clip(&id)?);
+        }
+        Ok(())
+    }
+
+    fn undo(&mut self, timeline: &mut Timeline) -> Result<(), TimelineError> {
+        for clip in std::mem::take(&mut self.removed) {
+            timeline.insert_clip(clip)?;
+        }
+        for split in self.splits.iter_mut().rev() {
+            split.undo(timeline)?;
+        }
+        self.splits.clear();
         Ok(())
     }
 }
@@ -442,5 +552,51 @@ mod tests {
         let json = serde_json::to_string(&cmd).unwrap();
         let back: TrimClipCommand = serde_json::from_str(&json).unwrap();
         assert_eq!(cmd, back);
+    }
+
+    #[test]
+    fn remove_range_cuts_middle_and_restores_on_undo() {
+        let mut tl = timeline();
+        tl.insert_clip(clip("a", 0.0, 10.0)).unwrap();
+        let mut remove = RemoveRangeCommand::new(3.0, 7.0).unwrap();
+        remove.execute(&mut tl).unwrap();
+        let kept: Vec<f64> = {
+            let mut starts: Vec<f64> = tl.clips.values().map(|clip| clip.start).collect();
+            starts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            starts
+        };
+        assert_eq!(kept, vec![0.0, 7.0]);
+        assert!((tl.duration() - 10.0).abs() < 1e-9);
+        remove.undo(&mut tl).unwrap();
+        assert_eq!(tl.clips.len(), 1);
+        assert_eq!(tl.clips["a"].duration, 10.0);
+    }
+
+    #[test]
+    fn remove_range_across_clips_keeps_abutters() {
+        let mut tl = timeline();
+        tl.insert_clip(clip("a", 0.0, 4.0)).unwrap();
+        tl.insert_clip(clip("b", 4.0, 4.0)).unwrap();
+        tl.insert_clip(clip("c", 8.0, 4.0)).unwrap();
+        let mut remove = RemoveRangeCommand::new(2.0, 9.0).unwrap();
+        remove.execute(&mut tl).unwrap();
+        // a → [0,2), b gone entirely, c split → c-b [9,12).
+        assert_eq!(tl.clips["a"].duration, 2.0);
+        assert!(!tl.clips.contains_key("b"));
+        assert!(!tl.clips.contains_key("c"));
+        assert_eq!(
+            (tl.clips["c-b"].start, tl.clips["c-b"].duration),
+            (9.0, 3.0)
+        );
+        remove.undo(&mut tl).unwrap();
+        assert_eq!(tl.clips.len(), 3);
+    }
+
+    #[test]
+    fn remove_range_rejects_bad_ranges() {
+        assert!(RemoveRangeCommand::new(5.0, 5.0).is_err());
+        assert!(RemoveRangeCommand::new(7.0, 5.0).is_err());
+        assert!(RemoveRangeCommand::new(-1.0, 5.0).is_err());
+        assert!(RemoveRangeCommand::new(f64::NAN, 5.0).is_err());
     }
 }

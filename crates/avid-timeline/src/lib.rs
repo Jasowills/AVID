@@ -13,8 +13,8 @@ pub mod model;
 pub mod undo;
 
 pub use commands::{
-    AddClipCommand, EditCommand, MoveClipCommand, RemoveClipCommand, SplitClipCommand,
-    TrimClipCommand,
+    AddClipCommand, EditCommand, MoveClipCommand, RemoveClipCommand, RemoveRangeCommand,
+    SplitClipCommand, TrimClipCommand,
 };
 pub use error::TimelineError;
 pub use model::{Clip, Seconds, Timeline, Track, TrackKind};
