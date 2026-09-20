@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { EmptyState, Panel } from "@avid/ui";
 import { Button } from "@avid/ui";
 import { AiPanel } from "../components/AiPanel";
+import { ExportDialog } from "../components/ExportDialog";
 import { MediaPanel } from "../components/MediaPanel";
+import { isTauri } from "../lib/ipc";
 import { TimelineDock } from "../components/TimelineDock";
 import { TopBar } from "../components/TopBar";
 import { TranscriptPanel } from "../components/TranscriptPanel";
@@ -24,6 +26,7 @@ export function Editor() {
   const project = useProjectStore((s) => s.projects.find((p) => p.id === id));
   const openProject = useProjectStore((s) => s.openProject);
   const [tab, setTab] = useState<ActiveTab>("Media");
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     if (id) openProject(id);
@@ -47,7 +50,11 @@ export function Editor() {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar />
+      <TopBar
+        saveStatus={isTauri() ? "Autosaved to project.json" : "Kept in this browser only"}
+        onExport={() => setExportOpen(true)}
+      />
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       <div className="grid min-h-0 flex-1 grid-cols-[16rem_1fr_16rem] gap-px bg-avid-border-subtle">
         <aside className="flex min-h-0 flex-col gap-px overflow-y-auto bg-avid-base p-2" aria-label="Side panels">
           <nav className="flex flex-wrap gap-1" aria-label="Panel tabs">

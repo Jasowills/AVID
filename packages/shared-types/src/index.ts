@@ -129,3 +129,42 @@ export interface Transcript {
   segments: TranscriptSegment[];
   provider: string;
 }
+
+/** Export preset (mirrors `avid-render::ExportPreset`). */
+export interface ExportPreset {
+  id: string;
+  label: string;
+  width: number;
+  fps: number;
+}
+
+export const EXPORT_PRESETS: ExportPreset[] = [
+  { id: "youtube-1080p", label: "YouTube 1080p", width: 1920, fps: 30 },
+  { id: "youtube-4k", label: "YouTube 4K", width: 3840, fps: 30 },
+  { id: "short-1080p", label: "Short / Reel 1080p", width: 1080, fps: 30 },
+  { id: "custom", label: "Custom", width: 1920, fps: 30 },
+];
+
+/** Export request payload (mirrors the `render_export` command input). */
+export interface ExportRequest {
+  presetId: string;
+  customWidth: number | null;
+  customFps: number | null;
+  filename: string;
+}
+
+/** Verified export result (mirrors the session `ExportResult`). */
+export interface ExportResult {
+  relative_path: string;
+  absolute_path: string;
+  duration: number;
+  width: number;
+  fps: number;
+}
+
+/** Speech-model status (mirrors the `ModelStatus` command output). */
+export interface ModelStatus {
+  downloaded: boolean;
+  path: string;
+  bytes: number | null;
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Button, EmptyState, Panel, TextField } from "@avid/ui";
-import type { Transcript } from "@avid/shared-types";
+import type { ModelStatus, Transcript } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
 
 /**
@@ -14,12 +14,17 @@ export function TranscriptPanel() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [modelBusy, setModelBusy] = useState(false);
+  const [modelNote, setModelNote] = useState<string | null>(null);
 
   async function onTranscribe(event: FormEvent): Promise<void> {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setErrorCode(null);
+    setModelNote(null);
     setTranscript(null);
     setActive(null);
     try {
@@ -30,8 +35,26 @@ export function TranscriptPanel() {
       setTranscript(result);
     } catch (e) {
       setError(e instanceof IpcError ? e.message : "Transcription failed unexpectedly.");
+      setErrorCode(e instanceof IpcError ? e.code : null);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onDownloadModel(): Promise<void> {
+    setModelBusy(true);
+    setModelNote(null);
+    try {
+      const status = await invokeCommand<ModelStatus>("ensure_speech_model");
+      setModelNote(
+        status.downloaded
+          ? `Speech model ready (${status.path}). Transcribe again.`
+          : "Model download reported incomplete — retry.",
+      );
+    } catch (e) {
+      setModelNote(e instanceof IpcError ? e.message : "Model download failed unexpectedly.");
+    } finally {
+      setModelBusy(false);
     }
   }
 
@@ -50,9 +73,19 @@ export function TranscriptPanel() {
       </form>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm text-avid-danger">
-          {error}
-        </p>
+        <div className="mt-3">
+          <p role="alert" className="text-sm text-avid-danger">
+            {error}
+          </p>
+          {errorCode === "AVID_TRANSCRIBE_001" && (
+            <div className="mt-2 flex flex-col gap-2">
+              <Button variant="secondary" disabled={modelBusy} onClick={onDownloadModel}>
+                {modelBusy ? "Downloading model (~77 MB)…" : "Download speech model"}
+              </Button>
+              {modelNote && <p className="text-sm text-avid-secondary">{modelNote}</p>}
+            </div>
+          )}
+        </div>
       )}
 
       {transcript && (

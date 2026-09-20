@@ -26,4 +26,13 @@ describe("ipc client", () => {
     const error = await invokeCommand("ping").catch((e: unknown) => e);
     expect((error as IpcError).code).toBe("INVOKE_FAILED");
   });
+
+  it("preserves backend error codes for UI branching", async () => {
+    setInvoker(async () => {
+      throw { code: "AVID_TRANSCRIBE_001", message: "No model." };
+    });
+    const error = (await invokeCommand("ping").catch((e: unknown) => e)) as IpcError;
+    expect(error.code).toBe("AVID_TRANSCRIBE_001");
+    expect(error.message).toBe("No model.");
+  });
 });

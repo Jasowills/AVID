@@ -62,6 +62,7 @@ impl AppState {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
@@ -71,6 +72,9 @@ fn main() {
             commands::import_media,
             commands::transcribe_media,
             commands::probe_media,
+            commands::speech_model_status,
+            commands::ensure_speech_model,
+            commands::render_export,
             commands::timeline_get,
             commands::timeline_add_clip,
             commands::timeline_remove_clip,

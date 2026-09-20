@@ -47,6 +47,15 @@ pub fn command_error_from_media(error: &avid_media::MediaError) -> CommandError 
     }
 }
 
+/// Map render errors to command errors, preserving stable codes.
+#[must_use]
+pub fn command_error_from_render(error: &avid_render::RenderError) -> CommandError {
+    CommandError {
+        code: error.code().to_owned(),
+        message: error.to_string(),
+    }
+}
+
 /// Translate engine errors into user-actionable messages. The technical
 /// detail stays available via logs, not raw stderr dumps.
 fn soften(error: &avid_media::MediaError) -> String {
@@ -313,6 +322,114 @@ pub fn timeline_undo(state: State<'_, crate::AppState>) -> Result<String, Comman
 #[tauri::command]
 pub fn timeline_redo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
     state.with_session(|session| session.redo())
+}
+
+/// Speech-model status for Settings/AI transparency.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelStatus {
+    pub downloaded: bool,
+    pub path: String,
+    pub bytes: Option<u64>,
+}
+
+fn speech_model_path(handle: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    if let Ok(path) = std::env::var("AVID_MODEL_PATH") {
+        return Ok(std::path::PathBuf::from(path));
+    }
+    Ok(handle
+        .path()
+        .app_cache_dir()
+        .map_err(|e| CommandError {
+            code: "AVID_TRANSCRIBE_001".to_owned(),
+            message: format!("AVID couldn't locate its cache folder: {e}"),
+        })?
+        .join("avid/models")
+        .join(avid_ai::DEFAULT_SPEECH_MODEL_FILE))
+}
+
+#[tauri::command]
+pub fn speech_model_status(handle: AppHandle) -> Result<ModelStatus, CommandError> {
+    let path = speech_model_path(&handle)?;
+    Ok(ModelStatus {
+        downloaded: path.is_file(),
+        path: path.display().to_string(),
+        bytes: std::fs::metadata(&path).ok().map(|meta| meta.len()),
+    })
+}
+
+/// Download the speech model on a blocking thread (never the async executor).
+/// Long first run (~77 MB); progress reporting lands with the job center.
+#[tauri::command]
+pub async fn ensure_speech_model(handle: AppHandle) -> Result<ModelStatus, CommandError> {
+    let path = speech_model_path(&handle)?;
+    if path.is_file() {
+        return Ok(ModelStatus {
+            downloaded: true,
+            path: path.display().to_string(),
+            bytes: std::fs::metadata(&path).ok().map(|meta| meta.len()),
+        });
+    }
+    let url = avid_ai::DEFAULT_SPEECH_MODEL_URL.to_owned();
+    let bytes = tokio::task::spawn_blocking(move || avid_ai::download_speech_model(&url, &path))
+        .await
+        .map_err(|e| CommandError {
+            code: "AVID_TRANSCRIBE_001".to_owned(),
+            message: format!("Model download was interrupted: {e}"),
+        })?
+        .map_err(|e| CommandError {
+            code: e.code().to_owned(),
+            message: e.to_string(),
+        })?;
+    Ok(ModelStatus {
+        downloaded: true,
+        path: speech_model_path(&handle)?.display().to_string(),
+        bytes: Some(bytes),
+    })
+}
+
+/// Export request from the dialog (mirrors `@avid/shared-types`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportRequest {
+    pub preset_id: String,
+    pub custom_width: Option<u32>,
+    pub custom_fps: Option<u32>,
+    pub filename: String,
+}
+
+/// Render the open timeline to `exports/` and verify the output.
+/// Async + blocking thread: renders take seconds to minutes and must never
+/// freeze the UI. Progress streaming lands with the job center.
+#[tauri::command]
+pub async fn render_export(
+    state: State<'_, crate::AppState>,
+    request: ExportRequest,
+) -> Result<crate::session::ExportResult, CommandError> {
+    // Snapshot under the lock; render off-lock.
+    let snapshot = state.with_session(|session| {
+        Ok((
+            session.dir().to_path_buf(),
+            session.timeline().clone(),
+            session.manifest().assets.clone(),
+        ))
+    })?;
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    tokio::task::spawn_blocking(move || {
+        crate::session::Session::export_snapshot(
+            &engine,
+            &snapshot.0,
+            &snapshot.1,
+            &snapshot.2,
+            &request.preset_id,
+            request.custom_width,
+            request.custom_fps,
+            &request.filename,
+        )
+    })
+    .await
+    .map_err(|e| CommandError {
+        code: "AVID_RENDER_004".to_owned(),
+        message: format!("Export was interrupted: {e}"),
+    })?
 }
 
 #[tauri::command]

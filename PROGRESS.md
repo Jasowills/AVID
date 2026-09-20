@@ -52,30 +52,23 @@
 - [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
 - [ ] Trim/drag interactions, zoom, snapping, shortcuts, markers
 
-## Phase 4 — Rendering & Export 🚧 (graph + render real, export UI pending)
+## Phase 4 — Rendering & Export ✅ (render + export real, preview pending)
 
 - [x] Deterministic render graph → single-ffmpeg DAG (concat + scale + drawtext overlays), escaping, compat path with `AVID_RENDER_005` guidance
 - [x] REAL render test (concat 2 windows → ffprobe verifies 4 s h264+aac); text-filter probe helper
+- [x] Export presets (YouTube 1080p/4K, Short 1080p, custom) + filename guard + `session.export` → render → duration verification
+- [x] LIVE export test (import fixture → short-1080p → verified 10 s file); async `render_export` command (blocking thread, never UI)
+- [x] Export dialog UI (preset, filename, timeline estimate, verified result, show-in-folder via opener plugin)
 - [ ] Preview pipeline (proxies, frame cache, quality selector)
-- [ ] Export dialog + presets UI (graph supports all presets already)
-
-- [ ] Timeline compiler → render graph → FFmpeg
-- [ ] Preview quality selector + frame cache
-- [ ] Export presets + dialog + post-export actions
-- [ ] Render tests (codec/duration/resolution/streams)
-
-## Phase 5 — Transcription ⬜
-
-- [ ] Local Whisper + word timings/speakers/confidence
-- [ ] Transcript↔timeline mapping + panel + text-based delete
 
 ## Phase 5 — Transcription ✅ (core loop real, panel UI pending)
 
 - [x] In-app `whisper-rs` binding (`transcribe_wav`, 16 kHz mono gate, greedy deterministic) + REAL in-process test (synthesized speech → "kafka"+"partitions" in 5.5 s)
 - [x] Rerunnable sidecar verification (`scripts/verify-transcription.sh`): exact transcript + 14 ordered word-segments
 - [x] Transcript model + whisper-JSON parser + phrase→range mapping for text-based delete (7 tests, real output shape)
-- [x] Transcript panel UI wired to `transcribe_media` (segments, ranges, provider label)
-- [ ] VAD chunking + speaker labels + model auto-download UX
+- [x] Transcript panel UI wired to `transcribe_media` (segments, ranges, provider label) + in-context model download on `AVID_TRANSCRIBE_001`
+- [x] Model auto-download (`ensure_speech_model` async command + `speech_model_status`; default tiny.en 77 MB to app cache)
+- [ ] VAD chunking + speaker labels
 
 ## Phase 6 — AI Runtime 🚧 (local real, cloud/config UI pending)
 
@@ -110,7 +103,7 @@
 
 - [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (probe panel wired to `probe_media`; playback pipeline pending)
 - [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
-- [x] FFmpeg rendering (graph + real render) · [ ] Export (dialog UI) · [x] Local transcription (in-app binding + real test) · [x] Transcript editing (phrase→range mapping)
+- [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [ ] One cloud provider · [ ] AI rough-cut proposal
 - [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
 - [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests

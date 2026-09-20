@@ -4,6 +4,8 @@ import { selectOpenProject, useProjectStore } from "../stores/useProjectStore";
 export interface TopBarProps {
   /** "Saved · 12:04" style status. Autosave indicator lands in Phase 3. */
   saveStatus?: string;
+  /** Opens the export dialog. Absent in contexts without a timeline. */
+  onExport?: () => void;
 }
 
 /**
@@ -11,7 +13,7 @@ export interface TopBarProps {
  * save status, AI status, preview quality (Phase 4), Export (Phase 4), Settings.
  * Unwired controls are visibly disabled with honest titles — never fake buttons.
  */
-export function TopBar({ saveStatus = "Not saved yet" }: TopBarProps) {
+export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) {
   const navigate = useNavigate();
   const project = useProjectStore(selectOpenProject);
 
@@ -56,9 +58,10 @@ export function TopBar({ saveStatus = "Not saved yet" }: TopBarProps) {
           AI: not configured
         </span>
         <button
-          disabled
-          title="Export (lands in Phase 4 with the render pipeline)"
-          className="rounded-avid-md bg-avid-accent-muted px-3 py-1.5 text-sm font-medium text-avid-muted disabled:cursor-not-allowed"
+          onClick={onExport}
+          disabled={!onExport}
+          title={onExport ? "Export the timeline (renders + verifies)" : "Export (open a project first)"}
+          className="rounded-avid-md bg-avid-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-avid-accent-hover disabled:cursor-not-allowed disabled:bg-avid-accent-muted disabled:text-avid-muted"
         >
           Export
         </button>

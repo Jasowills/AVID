@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "Least-privilege capabilities for the main window. Commands are allowed by default; filesystem and shell access stay denied until their phases add scoped permissions (ADR-001, AGENTS §105).",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "opener:default"]
 }

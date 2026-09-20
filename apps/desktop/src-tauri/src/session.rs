@@ -15,7 +15,7 @@ use avid_timeline::{
     TrackKind, UndoStack,
 };
 
-use crate::commands::{command_error_from_media, CommandError};
+use crate::commands::{command_error_from_media, command_error_from_render, CommandError};
 
 /// Transcript storage key: asset id → transcript JSON (see manifest docs).
 const TRANSCRIPT_PROVIDER: &str = "local-whispercpp";
@@ -318,6 +318,109 @@ impl Session {
             .probe_file(path)
             .map_err(|error| command_error_from_media(&error))
     }
+
+    /// Export the timeline: compile video-track clips → render → verify.
+    /// Pure over an explicit snapshot (dir + timeline + assets) so the async
+    /// command can run it on a blocking thread without holding the lock.
+    /// Returns the project-relative output path and verified duration.
+    pub fn export_snapshot(
+        engine: &MediaEngine,
+        dir: &Path,
+        timeline: &avid_timeline::Timeline,
+        assets: &[MediaAsset],
+        preset_id: &str,
+        custom_width: Option<u32>,
+        custom_fps: Option<u32>,
+        filename: &str,
+    ) -> Result<ExportResult, CommandError> {
+        use avid_render::{
+            argv_auto, graph_from_timeline, resolve_preset, validate_export_filename,
+        };
+        validate_export_filename(filename).map_err(|error| command_error_from_render(&error))?;
+        let (width, fps) = resolve_preset(preset_id, custom_width, custom_fps)
+            .map_err(|error| command_error_from_render(&error))?;
+        let graph = graph_from_timeline(
+            timeline,
+            &|media_id| {
+                assets
+                    .iter()
+                    .find(|asset| asset.id == media_id)
+                    .map(|asset| dir.join(&asset.relative_path))
+            },
+            width,
+            fps,
+        )
+        .map_err(|error| command_error_from_render(&error))?;
+        let exports = dir.join("exports");
+        std::fs::create_dir_all(&exports).map_err(|e| CommandError {
+            code: "AVID_RENDER_004".to_owned(),
+            message: format!("AVID couldn't prepare the exports folder: {e}"),
+        })?;
+        let output = exports.join(filename);
+        let argv = argv_auto(engine.ffmpeg_path(), &output, &graph)
+            .map_err(|error| command_error_from_render(&error))?;
+        engine
+            .run_render(&argv)
+            .map_err(|error| command_error_from_media(&error))?;
+        let info = engine
+            .probe_file(&output)
+            .map_err(|error| command_error_from_media(&error))?;
+        let duration = info.duration.ok_or_else(|| CommandError {
+            code: "AVID_RENDER_004".to_owned(),
+            message: "AVID couldn't verify the export — the output has no duration.".to_owned(),
+        })?;
+        if (duration - graph.total_duration()).abs() > 0.75 {
+            return Err(CommandError {
+                code: "AVID_RENDER_004".to_owned(),
+                message: format!(
+                    "Export verification failed: expected {:.1}s, got {:.1}s.",
+                    graph.total_duration(),
+                    duration
+                ),
+            });
+        }
+        Ok(ExportResult {
+            relative_path: format!("exports/{filename}"),
+            absolute_path: output.display().to_string(),
+            duration,
+            width,
+            fps,
+        })
+    }
+
+    /// Export the open timeline (locks briefly to snapshot, renders off-lock).
+    pub fn export(
+        &mut self,
+        engine: &MediaEngine,
+        preset_id: &str,
+        custom_width: Option<u32>,
+        custom_fps: Option<u32>,
+        filename: &str,
+    ) -> Result<ExportResult, CommandError> {
+        Self::export_snapshot(
+            engine,
+            &self.dir.clone(),
+            &self.timeline.clone(),
+            &self.manifest.assets.clone(),
+            preset_id,
+            custom_width,
+            custom_fps,
+            filename,
+        )
+    }
+}
+
+/// Verified export result (returned to the UI + tests).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExportResult {
+    /// Project-relative output path (`exports/final.mp4`).
+    pub relative_path: String,
+    /// Absolute output path (for "show in folder" actions).
+    pub absolute_path: String,
+    /// Probed output duration in seconds.
+    pub duration: f64,
+    pub width: u32,
+    pub fps: u32,
 }
 
 /// Base directory for projects under app data.
@@ -399,6 +502,31 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[test]
+    fn export_rejects_bad_requests_without_rendering() {
+        let Ok(engine) = MediaEngine::system() else {
+            return;
+        };
+        let dir = std::env::temp_dir().join("avid-export-invalid");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("s3")).unwrap();
+        // Empty timeline — validation fires before any ffmpeg spawn.
+        let err = session
+            .export(&engine, "youtube-1080p", None, None, "out.mp4")
+            .unwrap_err();
+        assert_eq!(err.code, "AVID_RENDER_001");
+        // Bad preset / filename likewise never reach ffmpeg.
+        let err = session
+            .export(&engine, "nope", None, None, "out.mp4")
+            .unwrap_err();
+        assert_eq!(err.code, "AVID_RENDER_006");
+        let err = session
+            .export(&engine, "youtube-1080p", None, None, "../evil.mp4")
+            .unwrap_err();
+        assert_eq!(err.code, "AVID_RENDER_006");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// LIVE vertical slice: import a real fixture (auto-places the V1 clip),
     /// synthesize speech, import + transcribe it, reload from disk.
     /// Ignored by default (needs ffmpeg, `say`, cached model); run explicitly.
@@ -468,6 +596,33 @@ mod tests {
         let loaded = Session::load(dir.clone()).unwrap();
         assert_eq!(loaded.manifest().assets.len(), 2);
         assert!(loaded.transcript_for(&speech.id).is_some());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// LIVE export: import the fixture, export a preset, verify the file.
+    /// Ignored by default (needs ffmpeg + fixture); run explicitly.
+    #[test]
+    #[ignore]
+    fn live_export_preset_produces_verified_file() {
+        let engine = MediaEngine::system().expect("system ffmpeg/ffprobe");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/media/talkinghead_10s.mp4");
+        assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
+        let dir = std::env::temp_dir().join("avid-export-live");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("export-live")).unwrap();
+        session.import_file(&engine, &fixture).unwrap();
+        let result = session
+            .export(&engine, "short-1080p", None, None, "short.mp4")
+            .unwrap();
+        assert_eq!(result.relative_path, "exports/short.mp4");
+        assert_eq!((result.width, result.fps), (1080, 30));
+        assert!(
+            (result.duration - 10.0).abs() < 0.75,
+            "duration = {}",
+            result.duration
+        );
+        assert!(dir.join(&result.relative_path).is_file());
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -7,14 +7,15 @@
  */
 
 export interface IpcErrorInfo {
-  code: "NOT_IN_TAURI" | "INVOKE_FAILED";
+  /** Backend `code` when the Rust command failed, else the client-side code. */
+  code: string;
   message: string;
 }
 
 export class IpcError extends Error {
-  readonly code: IpcErrorInfo["code"];
+  readonly code: string;
 
-  constructor(code: IpcErrorInfo["code"], message: string) {
+  constructor(code: string, message: string) {
     super(message);
     this.name = "IpcError";
     this.code = code;
@@ -47,6 +48,15 @@ export async function invokeCommand<T>(cmd: string, args?: Record<string, unknow
   try {
     return (await invoker(cmd, args)) as T;
   } catch (error) {
+    // Tauri rejects with the serialized command error ({code, message}) —
+    // preserve the backend code so the UI can branch on it.
+    if (typeof error === "object" && error !== null && "code" in error && "message" in error) {
+      const { code, message } = error as { code: unknown; message: unknown };
+      throw new IpcError(
+        typeof code === "string" ? code : "INVOKE_FAILED",
+        typeof message === "string" ? message : `Command '${cmd}' failed.`,
+      );
+    }
     throw new IpcError(
       "INVOKE_FAILED",
       `Command '${cmd}' failed: ${error instanceof Error ? error.message : String(error)}`,
