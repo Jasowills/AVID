@@ -276,6 +276,75 @@ pub fn argv_auto(
 }
 
 // ---------------------------------------------------------------------------
+// Caption sidecars (SRT export — Phase 7 captions data path)
+// ---------------------------------------------------------------------------
+
+/// A caption cue extracted from a caption-track clip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaptionCue {
+    pub start: f64,
+    pub end: f64,
+    pub text: String,
+}
+
+/// Extract caption cues from caption-kind tracks, ordered by start.
+/// Empty-text clips are skipped (they carry no readable content).
+pub fn caption_cues_from_timeline(timeline: &avid_timeline::Timeline) -> Vec<CaptionCue> {
+    let caption_tracks: Vec<&str> = timeline
+        .tracks
+        .iter()
+        .filter(|track| track.kind == avid_timeline::TrackKind::Caption)
+        .map(|track| track.id.as_str())
+        .collect();
+    let mut cues: Vec<CaptionCue> = timeline
+        .clips
+        .values()
+        .filter(|clip| caption_tracks.contains(&clip.track_id.as_str()))
+        .map(|clip| CaptionCue {
+            start: clip.start,
+            end: clip.start + clip.duration,
+            text: clip.name.trim().to_owned(),
+        })
+        .filter(|cue| !cue.text.is_empty() && cue.end > cue.start)
+        .collect();
+    cues.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    cues
+}
+
+/// Format cues as SubRip (`.srt`): numbered `HH:MM:SS,mmm --> ...` blocks.
+/// Written alongside the render (`<name>.srt`) for players and for later
+/// burn-in once a text-capable sidecar is pinned.
+pub fn captions_to_srt(cues: &[CaptionCue]) -> String {
+    let mut output = String::new();
+    for (index, cue) in cues.iter().enumerate() {
+        output.push_str(&format!(
+            "{}\n{} --> {}\n{}\n\n",
+            index + 1,
+            srt_timestamp(cue.start),
+            srt_timestamp(cue.end),
+            cue.text
+        ));
+    }
+    output
+}
+
+/// Format seconds as `HH:MM:SS,mmm` (clamped at zero, millis rounded).
+fn srt_timestamp(seconds: f64) -> String {
+    let total_ms = (seconds.max(0.0) * 1000.0).round() as u64;
+    let (hours, remainder) = (total_ms / 3_600_000, total_ms % 3_600_000);
+    let (minutes, remainder) = (remainder / 60_000, remainder % 60_000);
+    format!(
+        "{hours:02}:{minutes:02}:{:02},{:03}",
+        remainder / 1000,
+        remainder % 1000
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Export presets + timeline compilation (Phase 4 export path)
 // ---------------------------------------------------------------------------
 
@@ -509,6 +578,68 @@ mod tests {
     #[test]
     fn total_duration_sums_segments() {
         assert_eq!(graph().total_duration(), 5.0);
+    }
+
+    #[test]
+    fn srt_sidecar_formats_cues_with_millis() {
+        let cues = vec![
+            CaptionCue {
+                start: 1.0,
+                end: 3.256,
+                text: "Hello".to_owned(),
+            },
+            CaptionCue {
+                start: 65.0,
+                end: 67.5,
+                text: "Line one\nLine two".to_owned(),
+            },
+        ];
+        assert_eq!(
+            captions_to_srt(&cues),
+            "1\n00:00:01,000 --> 00:00:03,256\nHello\n\n2\n00:01:05,000 --> 00:01:07,500\nLine one\nLine two\n\n"
+        );
+        assert_eq!(captions_to_srt(&[]), "");
+    }
+
+    #[test]
+    fn cue_extraction_reads_caption_tracks_in_order() {
+        use avid_timeline::{Clip, Timeline, Track, TrackKind};
+        let mut timeline = Timeline::default();
+        for (id, kind) in [("v1", TrackKind::Video), ("cc", TrackKind::Caption)] {
+            timeline.tracks.push(Track {
+                id: id.to_owned(),
+                kind,
+                index: 0,
+                name: id.to_owned(),
+                locked: false,
+                muted: false,
+            });
+        }
+        let mk = |id: &str, track: &str, start: f64, name: &str| Clip {
+            id: id.to_owned(),
+            source_media_id: "x".to_owned(),
+            track_id: track.to_owned(),
+            start,
+            duration: 2.0,
+            in_point: 0.0,
+            name: name.to_owned(),
+        };
+        timeline
+            .insert_clip(mk("late", "cc", 10.0, "Second"))
+            .unwrap();
+        timeline
+            .insert_clip(mk("early", "cc", 1.0, "First"))
+            .unwrap();
+        timeline
+            .insert_clip(mk("vid", "v1", 0.0, "Not a caption"))
+            .unwrap();
+        timeline.insert_clip(mk("blank", "cc", 5.0, "   ")).unwrap();
+        let cues = caption_cues_from_timeline(&timeline);
+        assert_eq!(cues.len(), 2);
+        assert_eq!(
+            (cues[0].text.as_str(), cues[1].text.as_str()),
+            ("First", "Second")
+        );
     }
 
     #[test]

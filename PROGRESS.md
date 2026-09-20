@@ -53,6 +53,7 @@
 - [x] Grouped + transactional undo (`UndoStack`, manual groups, single-label AI undo)
 - [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved) + inspector trim form
 - [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
+- [x] Recovery snapshots (§117): pre-apply snapshot (pruned to 10) + list/restore commands + AiPanel restore button; restore restarts history honestly
 - [ ] Drag/zoom/snapping, markers, shortcuts
 
 ## Phase 4 — Rendering & Export ✅ (render + export real, preview pending)
@@ -60,7 +61,8 @@
 - [x] Deterministic render graph → single-ffmpeg DAG (concat + scale + drawtext overlays), escaping, compat path with `AVID_RENDER_005` guidance
 - [x] REAL render test (concat 2 windows → ffprobe verifies 4 s h264+aac); text-filter probe helper
 - [x] Export presets (YouTube 1080p/4K, Short 1080p, custom) + filename guard + `session.export` → render → duration verification
-- [x] LIVE export test (import fixture → short-1080p → verified 10 s file); async `render_export` command (blocking thread, never UI)
+- [x] Caption sidecar: caption-track clips → `<name>.srt` alongside the render (burn-in follows with a text-capable sidecar); live-tested
+- [x] LIVE export test (import fixture → short-1080p → verified 10 s file + .srt); async `render_export` command (blocking thread, never UI)
 - [x] Export dialog UI (preset, filename, timeline estimate, verified result, show-in-folder via opener plugin)
 - [ ] Preview pipeline (proxies, frame cache, quality selector)
 
@@ -112,10 +114,10 @@
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
 - [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (proxy + seekable stream + pane)
-- [x] Timeline (engine) · [x] Basic editing (5 commands) · [x] Undo/redo (grouped+transactional) · [ ] Autosave
-- [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
+- [x] Timeline (engine) · [x] Basic editing (6 commands) · [x] Undo/redo (grouped+transactional) · [x] Autosave (persist-on-mutation + recovery snapshots)
+- [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder + captions SRT) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [x] One cloud provider (shape + auth + probe; live call needs a key) · [x] AI rough-cut proposal (detectors + proposal + review + apply)
-- [ ] Captions · [x] Text overlays (graph lowering; burn-in needs capable sidecar) · [ ] Basic diagrams · [x] Templates (format+content)
+- [x] Captions (transcribe + caption clips + SRT sidecar; styled burn-in pending capable sidecar) · [x] Text overlays (graph lowering + SRT path; burn-in needs text filters) · [ ] Basic diagrams · [x] Templates (format+content)
 - [x] Example projects (parseable) · [ ] Crash recovery · [x] Documentation · [x] Tests
 
 ## Explicitly excluded from MVP (do not build yet)

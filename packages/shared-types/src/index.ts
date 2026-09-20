@@ -160,6 +160,7 @@ export interface ExportResult {
   duration: number;
   width: number;
   fps: number;
+  caption_path: string | null;
 }
 
 /** Speech-model status (mirrors the `ModelStatus` command output). */
@@ -204,6 +205,8 @@ export interface OpResult {
 export interface ApplyReport {
   label: string;
   results: OpResult[];
+  /** Pre-apply recovery snapshot name (`None` when nothing applied). */
+  snapshot: string | null;
 }
 
 /** Imported media asset (mirrors `avid-project::MediaAsset`). */

@@ -170,6 +170,11 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 Exported {result.relative_path} ({result.duration.toFixed(1)}s verified, {result.width}p
                 {result.fps}).
               </p>
+              {result.caption_path && (
+                <p className="mt-1 font-mono text-xs text-avid-secondary">
+                  Captions: {result.caption_path}
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
                 <Button variant="secondary" onClick={onReveal}>
                   Show in folder
