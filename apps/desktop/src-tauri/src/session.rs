@@ -112,11 +112,7 @@ impl Session {
 
     /// Sync the timeline into the manifest and write `project.json`.
     pub fn persist(&mut self) -> Result<(), CommandError> {
-        self.manifest.timeline =
-            serde_json::to_value(&self.timeline).map_err(|e| CommandError {
-                code: "AVID_PROJECT_001".to_owned(),
-                message: format!("AVID couldn't serialize the timeline: {e}"),
-            })?;
+        self.sync_manifest()?;
         std::fs::create_dir_all(&self.dir).map_err(|e| CommandError {
             code: "AVID_PROJECT_001".to_owned(),
             message: format!("AVID couldn't write the project folder: {e}"),
@@ -128,6 +124,119 @@ impl Session {
             }
         })?;
         Ok(())
+    }
+
+    /// Sync the live timeline into the manifest without touching disk.
+    fn sync_manifest(&mut self) -> Result<(), CommandError> {
+        self.manifest.timeline =
+            serde_json::to_value(&self.timeline).map_err(|e| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: format!("AVID couldn't serialize the timeline: {e}"),
+            })?;
+        Ok(())
+    }
+
+    /// Snapshot the current manifest JSON for recovery (AGENTS §117).
+    /// Stored as `snapshots/<millis>-<label>.json`, pruned to the newest 10.
+    /// Returns the snapshot file name (bare — safe to round-trip).
+    pub fn snapshot(&mut self, label: &str) -> Result<String, CommandError> {
+        self.sync_manifest()?;
+        let safe_label: String = label
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .take(40)
+            .collect();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let name = format!("{stamp}-{safe_label}.json");
+        let dir = self.dir.join("snapshots");
+        std::fs::create_dir_all(&dir).map_err(|e| CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: format!("AVID couldn't prepare snapshots: {e}"),
+        })?;
+        std::fs::write(dir.join(&name), self.manifest.to_json()?).map_err(|e| CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: format!("AVID couldn't write the snapshot: {e}"),
+        })?;
+        self.prune_snapshots()?;
+        Ok(name)
+    }
+
+    /// Keep only the newest 10 snapshots (lexicographic = chronological here).
+    fn prune_snapshots(&self) -> Result<(), CommandError> {
+        let dir = self.dir.join("snapshots");
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .map_err(|e| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: format!("AVID couldn't list snapshots: {e}"),
+            })?
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".json"))
+            .collect();
+        names.sort();
+        for stale in names.iter().take(names.len().saturating_sub(10)) {
+            std::fs::remove_file(dir.join(stale)).ok();
+        }
+        Ok(())
+    }
+
+    /// Snapshot metadata for recovery UI (newest first).
+    #[must_use]
+    pub fn list_snapshots(&self) -> Vec<SnapshotInfo> {
+        let mut entries: Vec<SnapshotInfo> = std::fs::read_dir(self.dir.join("snapshots"))
+            .map(|read| {
+                read.flatten()
+                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                    .filter(|name| name.ends_with(".json"))
+                    .map(|name| SnapshotInfo { name })
+                    .collect()
+            })
+            .unwrap_or_default();
+        entries.sort_by(|a, b| b.name.cmp(&a.name));
+        entries
+    }
+
+    /// Restore a snapshot by bare file name (traversal rejected by construction:
+    /// only names from `list_snapshots` are valid, and separators are refused).
+    /// History restarts (documented: restore is itself the recovery point).
+    pub fn restore_snapshot(&mut self, name: &str) -> Result<(), CommandError> {
+        if name.is_empty()
+            || name.len() > 100
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains("..")
+            || !name.ends_with(".json")
+        {
+            return Err(CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: "That snapshot name isn't valid.".to_owned(),
+            });
+        }
+        let json = std::fs::read_to_string(self.dir.join("snapshots").join(name)).map_err(|e| {
+            CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: format!("AVID couldn't read that snapshot: {e}"),
+            }
+        })?;
+        let manifest = ProjectManifest::from_json(&json)?;
+        let timeline: Timeline =
+            serde_json::from_value(manifest.timeline.clone()).map_err(|e| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: format!("Snapshot timeline is corrupt: {e}"),
+            })?;
+        self.manifest = manifest;
+        self.timeline = timeline;
+        self.undo = UndoStack::default();
+        self.persist()
     }
 
     /// Execute one command as an undo step and persist.
@@ -534,6 +643,7 @@ impl Session {
             duration,
             width,
             fps,
+            caption_path: write_caption_sidecar(&exports, &request.filename, timeline)?,
         })
     }
 
@@ -582,6 +692,40 @@ pub struct ExportResult {
     pub duration: f64,
     pub width: u32,
     pub fps: u32,
+    /// Project-relative caption sidecar (`exports/<stem>.srt`), if any
+    /// caption clips exist. Burn-in follows with a text-capable sidecar.
+    pub caption_path: Option<String>,
+}
+
+/// Write the SRT sidecar for caption-track clips, if any.
+/// Returns the project-relative path or `None` (no captions is normal).
+fn write_caption_sidecar(
+    exports: &Path,
+    filename: &str,
+    timeline: &avid_timeline::Timeline,
+) -> Result<Option<String>, CommandError> {
+    let cues = avid_render::caption_cues_from_timeline(timeline);
+    if cues.is_empty() {
+        return Ok(None);
+    }
+    let stem = filename.trim_end_matches(".mp4").trim_end_matches(".MP4");
+    let relative_path = format!("exports/{stem}.srt");
+    std::fs::write(
+        exports.join(format!("{stem}.srt")),
+        avid_render::captions_to_srt(&cues),
+    )
+    .map_err(|e| CommandError {
+        code: "AVID_RENDER_004".to_owned(),
+        message: format!("AVID couldn't write captions: {e}"),
+    })?;
+    Ok(Some(relative_path))
+}
+
+/// Recovery snapshot metadata (returned to the UI).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SnapshotInfo {
+    /// Bare file name (`<millis>-<label>.json`) — safe to round-trip.
+    pub name: String,
 }
 
 /// Base directory for projects under app data.
@@ -850,6 +994,18 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
         let mut session = Session::create(dir.clone(), manifest("export-live")).unwrap();
         session.import_file(&engine, &fixture).unwrap();
+        session.ensure_caption_track().unwrap();
+        session
+            .add_clip(avid_timeline::Clip {
+                id: "cap-1".to_owned(),
+                source_media_id: "caption".to_owned(),
+                track_id: "captions".to_owned(),
+                start: 1.0,
+                duration: 2.0,
+                in_point: 0.0,
+                name: "Hello captions".to_owned(),
+            })
+            .unwrap();
         let result = session
             .export(
                 &engine,
@@ -866,6 +1022,35 @@ mod tests {
             result.duration
         );
         assert!(dir.join(&result.relative_path).is_file());
+        // Caption sidecar written alongside the render.
+        assert_eq!(result.caption_path, Some("exports/short.srt".to_owned()));
+        let srt = std::fs::read_to_string(dir.join("exports/short.srt")).unwrap();
+        assert!(srt.contains("Hello captions"), "{srt}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn snapshot_restore_recovers_and_restarts_history() {
+        let dir = std::env::temp_dir().join("avid-snapshot-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("snap")).unwrap();
+        session.add_clip(clip("a", 0.0, 8.0)).unwrap();
+        let name = session.snapshot("pre-apply").unwrap();
+        assert!(name.ends_with(".json"));
+        assert_eq!(session.list_snapshots().len(), 1);
+        session.remove_clip("a").unwrap();
+        assert!(session.timeline().clips.is_empty());
+        session.restore_snapshot(&name).unwrap();
+        assert!(session.timeline().clips.contains_key("a"));
+        assert_eq!(session.undo_depth(), 0);
+        // Traversal and missing names fail closed.
+        assert!(session.restore_snapshot("../evil.json").is_err());
+        assert!(session.restore_snapshot("nope.json").is_err());
+        // Pruning keeps the newest 10.
+        for _ in 0..12 {
+            session.snapshot("x").unwrap();
+        }
+        assert_eq!(session.list_snapshots().len(), 10);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -46,6 +46,7 @@ export function AiPanel() {
   const [report, setReport] = useState<ApplyReport | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [proposalAsset, setProposalAsset] = useState("");
   const [minSilence, setMinSilence] = useState("1.0");
   const [includeFillers, setIncludeFillers] = useState(true);
@@ -129,6 +130,7 @@ export function AiPanel() {
       });
       setReport({
         label: result.label,
+        snapshot: result.snapshot,
         results: [
           ...result.results,
           ...deferred.map((op, i) => ({
@@ -276,6 +278,29 @@ export function AiPanel() {
               </li>
             ))}
           </ul>
+          {report.snapshot && (
+            <div className="mt-2">
+              <Button
+                variant="ghost"
+                disabled={restoring}
+                onClick={async () => {
+                  setRestoring(true);
+                  try {
+                    await invokeCommand("restore_snapshot", { name: report.snapshot });
+                    notifyTimelineChanged();
+                    setReport(null);
+                    setReview(null);
+                  } catch (e) {
+                    setApplyError(e instanceof IpcError ? e.message : "Restore failed unexpectedly.");
+                  } finally {
+                    setRestoring(false);
+                  }
+                }}
+              >
+                {restoring ? "Restoring…" : "Restore pre-apply state"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Panel>

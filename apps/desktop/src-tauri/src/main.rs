@@ -93,6 +93,8 @@ fn main() {
             commands::list_jobs,
             commands::cancel_job,
             commands::probe_provider,
+            commands::list_snapshots,
+            commands::restore_snapshot,
             commands::timeline_get,
             commands::timeline_add_clip,
             commands::timeline_remove_clip,

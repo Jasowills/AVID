@@ -575,6 +575,8 @@ pub struct OpResult {
 pub struct ApplyReport {
     pub label: String,
     pub results: Vec<OpResult>,
+    /// Pre-apply recovery snapshot (`None` when nothing was applied).
+    pub snapshot: Option<String>,
 }
 
 /// Apply accepted operations as ONE transactional undo step (ADR-008).
@@ -633,13 +635,23 @@ fn apply_validated_ops(
         }
     }
     if commands.is_empty() {
-        return Ok(ApplyReport { label, results });
+        return Ok(ApplyReport {
+            label,
+            results,
+            snapshot: None,
+        });
     }
     if needs_captions {
         session.ensure_caption_track()?;
     }
+    // Recovery point before the group mutates anything (AGENTS §117).
+    let snapshot = Some(session.snapshot("pre-apply")?);
     session.mutate_group(&label, commands)?;
-    Ok(ApplyReport { label, results })
+    Ok(ApplyReport {
+        label,
+        results,
+        snapshot,
+    })
 }
 
 /// Validation outcome: runnable command, honest skip, or rejection.
@@ -873,6 +885,24 @@ pub async fn render_export(
 #[tauri::command]
 pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>, CommandError> {
     state.with_session(|session| Ok(session.manifest().assets.clone()))
+}
+
+/// List recovery snapshots for a project (newest first).
+#[tauri::command]
+pub fn list_snapshots(
+    state: State<'_, crate::AppState>,
+) -> Result<Vec<crate::session::SnapshotInfo>, CommandError> {
+    state.with_session(|session| Ok(session.list_snapshots()))
+}
+
+/// Restore a pre-AI (or any listed) snapshot. History restarts at the
+/// restored state — the restore itself is the new recovery point.
+#[tauri::command]
+pub fn restore_snapshot(
+    state: State<'_, crate::AppState>,
+    name: String,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.restore_snapshot(&name))
 }
 
 /// Generate a 540p editing proxy for a video asset (async job with progress
