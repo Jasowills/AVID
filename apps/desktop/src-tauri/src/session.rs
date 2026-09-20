@@ -194,6 +194,21 @@ impl Session {
         self.mutate("Split clip", Box::new(SplitClipCommand::new(clip_id, at)))
     }
 
+    /// Trim a clip to a new start/duration (undoable, persisted).
+    pub fn trim_clip(
+        &mut self,
+        clip_id: &str,
+        start: f64,
+        duration: f64,
+    ) -> Result<(), CommandError> {
+        self.mutate(
+            "Trim clip",
+            Box::new(avid_timeline::TrimClipCommand::new(
+                clip_id, start, duration,
+            )),
+        )
+    }
+
     /// Undo the last step and persist.
     pub fn undo(&mut self) -> Result<String, CommandError> {
         let label = self

@@ -369,6 +369,16 @@ pub fn timeline_split_clip(
 }
 
 #[tauri::command]
+pub fn timeline_trim_clip(
+    state: State<'_, crate::AppState>,
+    clip_id: String,
+    start: f64,
+    duration: f64,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.trim_clip(&clip_id, start, duration))
+}
+
+#[tauri::command]
 pub fn timeline_undo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
     state.with_session(|session| session.undo())
 }
@@ -865,6 +875,74 @@ pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>,
     state.with_session(|session| Ok(session.manifest().assets.clone()))
 }
 
+/// Provider probe outcome for the Settings connection test (AGENTS §147).
+/// Reachability problems are reported IN the result (a test reports, it
+/// doesn't throw) — only malformed input is an error.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderProbe {
+    pub reachable: bool,
+    pub structured_output: bool,
+    pub message: String,
+}
+
+/// Test a provider endpoint: OpenAI-compatible base URL + model + optional
+/// cloud key. Runs the same structured-output probe the app uses at setup.
+#[tauri::command]
+pub async fn probe_provider(
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+) -> Result<ProviderProbe, CommandError> {
+    let base_url = base_url.trim().to_owned();
+    if !(base_url.starts_with("http://") || base_url.starts_with("https://"))
+        || base_url.contains(char::is_whitespace)
+        || base_url.len() > 200
+    {
+        return Err(CommandError {
+            code: "AVID_AI_001".to_owned(),
+            message: "Enter an http(s) base URL, e.g. http://localhost:11434.".to_owned(),
+        });
+    }
+    if model.trim().is_empty() || model.len() > 120 {
+        return Err(CommandError {
+            code: "AVID_AI_001".to_owned(),
+            message: "Enter a model id, e.g. qwen2.5:7b.".to_owned(),
+        });
+    }
+    tokio::task::spawn_blocking(move || {
+        let mut adapter = avid_ai::OpenAiCompatAdapter::new(
+            avid_ai::UreqTransport::new(),
+            base_url,
+            model,
+        );
+        if let Some(key) = api_key.filter(|key| !key.trim().is_empty()) {
+            adapter = adapter.with_api_key(key);
+        }
+        match adapter.probe_structured_output() {
+            Ok(true) => ProviderProbe {
+                reachable: true,
+                structured_output: true,
+                message: "Provider ready.".to_owned(),
+            },
+            Ok(false) => ProviderProbe {
+                reachable: true,
+                structured_output: false,
+                message: "Provider responded, but does not support structured output required for AI editing.".to_owned(),
+            },
+            Err(error) => ProviderProbe {
+                reachable: false,
+                structured_output: false,
+                message: format!("Provider unreachable: {error}"),
+            },
+        }
+    })
+    .await
+    .map_err(|e| CommandError {
+        code: "AVID_AI_001".to_owned(),
+        message: format!("Probe was interrupted: {e}"),
+    })
+}
+
 /// List all known jobs for the job-center UI (newest last).
 #[tauri::command]
 pub fn list_jobs(state: State<'_, crate::AppState>) -> Vec<crate::jobs::JobRecord> {
@@ -1061,6 +1139,27 @@ mod tests {
         let silence_only = build_proposal(&silences, &fillers, false);
         assert_eq!(silence_only.cuts.len(), 2);
         assert_eq!(silence_only.analyzed, "silence");
+    }
+
+    #[tokio::test]
+    async fn probe_reports_unreachable_instead_of_throwing() {
+        let probe = probe_provider("http://127.0.0.1:1".to_owned(), "m".to_owned(), None)
+            .await
+            .unwrap();
+        assert!(!probe.reachable);
+        assert!(!probe.structured_output);
+    }
+
+    #[tokio::test]
+    async fn probe_rejects_non_http_urls() {
+        assert!(probe_provider("ftp://x".to_owned(), "m".to_owned(), None)
+            .await
+            .is_err());
+        assert!(
+            probe_provider("http://x y".to_owned(), "m".to_owned(), None)
+                .await
+                .is_err()
+        );
     }
 
     #[test]

@@ -166,8 +166,13 @@ pub fn download_speech_model(url: &str, dest: &std::path::Path) -> Result<u64, A
 
 /// Minimal HTTP transport (mockable in tests).
 pub trait HttpTransport {
-    /// POST a JSON body; return `(status_code, body)`.
-    fn post_json(&self, url: &str, body: &Value) -> Result<(u16, String), AiError>;
+    /// POST a JSON body with extra headers; return `(status_code, body)`.
+    fn post_json(
+        &self,
+        url: &str,
+        body: &Value,
+        headers: &[(&str, String)],
+    ) -> Result<(u16, String), AiError>;
 }
 
 /// `ureq`-backed transport for production use.
@@ -192,10 +197,17 @@ impl Default for UreqTransport {
 }
 
 impl HttpTransport for UreqTransport {
-    fn post_json(&self, url: &str, body: &Value) -> Result<(u16, String), AiError> {
-        let mut response = self
-            .agent
-            .post(url)
+    fn post_json(
+        &self,
+        url: &str,
+        body: &Value,
+        headers: &[(&str, String)],
+    ) -> Result<(u16, String), AiError> {
+        let mut request = self.agent.post(url);
+        for (name, value) in headers {
+            request = request.header(*name, value);
+        }
+        let mut response = request
             .send_json(body)
             .map_err(|e| AiError::Transport(e.to_string()))?;
         let status = response.status().as_u16();
@@ -209,10 +221,13 @@ impl HttpTransport for UreqTransport {
 
 /// OpenAI-compatible chat adapter (Ollama `/v1`, LM Studio, vLLM, OpenAI).
 /// One canonical path per ADR-005 — no per-provider call sites elsewhere.
+/// `api_key` is `None` for local endpoints, `Some` for cloud (sent as a
+/// Bearer token; stored by the app, never logged).
 pub struct OpenAiCompatAdapter<T: HttpTransport> {
     transport: T,
     base_url: String,
     model: String,
+    api_key: Option<String>,
 }
 
 impl<T: HttpTransport> OpenAiCompatAdapter<T> {
@@ -222,7 +237,26 @@ impl<T: HttpTransport> OpenAiCompatAdapter<T> {
             transport,
             base_url: base_url.into(),
             model: model.into(),
+            api_key: None,
         }
+    }
+
+    /// Attach a cloud API key (builder style; local endpoints skip this).
+    #[must_use]
+    pub fn with_api_key(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        self.api_key = if key.trim().is_empty() {
+            None
+        } else {
+            Some(key)
+        };
+        self
+    }
+
+    /// Whether this adapter authenticates (cloud) or not (local).
+    #[must_use]
+    pub fn is_cloud(&self) -> bool {
+        self.api_key.is_some()
     }
 
     fn endpoint(&self) -> String {
@@ -230,6 +264,13 @@ impl<T: HttpTransport> OpenAiCompatAdapter<T> {
             "{}/v1/chat/completions",
             self.base_url.trim_end_matches('/')
         )
+    }
+
+    fn auth_headers(&self) -> Vec<(&'static str, String)> {
+        self.api_key
+            .as_ref()
+            .map(|key| vec![("Authorization", format!("Bearer {key}"))])
+            .unwrap_or_default()
     }
 
     /// Request a structured JSON object conforming to `schema` (JSON Schema).
@@ -252,7 +293,9 @@ impl<T: HttpTransport> OpenAiCompatAdapter<T> {
                 "json_schema": {"name": "avid_result", "strict": true, "schema": schema},
             },
         });
-        let (status, text) = self.transport.post_json(&self.endpoint(), &body)?;
+        let (status, text) =
+            self.transport
+                .post_json(&self.endpoint(), &body, &self.auth_headers())?;
         if !(200..300).contains(&status) {
             return Err(AiError::Provider {
                 status: status.to_string(),
@@ -306,12 +349,15 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    /// Scripted transport: URL suffix → queued responses.
+    /// Scripted transport: URL suffix → queued responses. Records headers
+    /// of the last call per suffix for auth assertions.
     type QueuedResponse = Vec<Result<(u16, String), String>>;
+    type RecordedHeaders = Vec<(String, String)>;
 
     #[derive(Debug, Default, Clone)]
     struct MockTransport {
         responses: Arc<Mutex<HashMap<String, QueuedResponse>>>,
+        last_headers: Arc<Mutex<HashMap<String, RecordedHeaders>>>,
     }
 
     impl MockTransport {
@@ -323,24 +369,46 @@ mod tests {
                 .or_default()
                 .push(response);
         }
+
+        fn headers_for(&self, url_suffix: &str) -> RecordedHeaders {
+            self.last_headers
+                .lock()
+                .unwrap()
+                .get(url_suffix)
+                .cloned()
+                .unwrap_or_default()
+        }
     }
 
     impl HttpTransport for MockTransport {
-        fn post_json(&self, url: &str, _body: &Value) -> Result<(u16, String), AiError> {
+        fn post_json(
+            &self,
+            url: &str,
+            _body: &Value,
+            headers: &[(&str, String)],
+        ) -> Result<(u16, String), AiError> {
             let mut guard = self.responses.lock().unwrap();
             let key = guard.keys().find(|k| url.ends_with(k.as_str())).cloned();
-            match key.and_then(|k| {
-                guard.get_mut(&k).and_then(|q| {
-                    if q.is_empty() {
-                        None
-                    } else {
-                        Some(q.remove(0))
-                    }
-                })
+            let Some(key) = key else {
+                return Err(AiError::Transport(format!("no mock for {url}")));
+            };
+            self.last_headers.lock().unwrap().insert(
+                key.clone(),
+                headers
+                    .iter()
+                    .map(|(name, value)| ((*name).to_owned(), value.clone()))
+                    .collect(),
+            );
+            match guard.get_mut(&key).and_then(|q| {
+                if q.is_empty() {
+                    None
+                } else {
+                    Some(q.remove(0))
+                }
             }) {
                 Some(Ok(response)) => Ok(response),
                 Some(Err(message)) => Err(AiError::Transport(message)),
-                None => Err(AiError::Transport(format!("no mock for {url}"))),
+                None => Err(AiError::Transport(format!("mock exhausted for {url}"))),
             }
         }
     }
@@ -416,6 +484,41 @@ mod tests {
         transport.queue("/v1/chat/completions", Ok((200, chat_envelope("not json"))));
         let adapter = OpenAiCompatAdapter::new(transport, "http://x", "m");
         assert!(!adapter.probe_structured_output().unwrap());
+    }
+
+    #[test]
+    fn cloud_key_travels_as_bearer_and_blank_means_local() {
+        let transport = MockTransport::default();
+        transport.queue(
+            "/v1/chat/completions",
+            Ok((200, chat_envelope(r#"{"ok":true}"#))),
+        );
+        transport.queue(
+            "/v1/chat/completions",
+            Ok((200, chat_envelope(r#"{"ok":true}"#))),
+        );
+        let schema = serde_json::json!({"type": "object"});
+
+        let cloud = OpenAiCompatAdapter::new(transport.clone(), "https://api.openai.com", "gpt-x")
+            .with_api_key("sk-test");
+        assert!(cloud.is_cloud());
+        cloud.complete_json("s", "u", &schema).unwrap();
+        assert_eq!(
+            transport.headers_for("/v1/chat/completions"),
+            vec![("Authorization".to_owned(), "Bearer sk-test".to_owned())]
+        );
+
+        let local = OpenAiCompatAdapter::new(transport.clone(), "http://localhost:11434", "m")
+            .with_api_key("   ");
+        assert!(!local.is_cloud());
+        local.complete_json("s", "u", &schema).unwrap();
+        assert!(
+            !transport
+                .headers_for("/v1/chat/completions")
+                .iter()
+                .any(|(name, _)| name == "Authorization"),
+            "local endpoints must not receive credentials"
+        );
     }
 
     #[test]
