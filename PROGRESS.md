@@ -109,4 +109,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 
 | Date | Commit | What changed |
 |------|--------|--------------|
-| 2026-09-20 | `chore(scaffold)` (pending push) | Initial clean scaffold: structure, README, PLAN, PROGRESS, ROADMAP, collab docs, verify script. No app code per AGENTS §157. |
+| 2026-09-20 | `fe110c1` / pushed to `main` | Initial clean scaffold: structure, README, PLAN, PROGRESS, ROADMAP, collab docs, verify script. No app code per AGENTS §157. |
