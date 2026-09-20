@@ -368,7 +368,7 @@ impl MediaEngine {
         min_seconds: f64,
     ) -> Result<Vec<SilenceSpan>, MediaError> {
         check_input_path(input)?;
-        if !(-80.0..=-10.0).contains(&noise_db) || !(min_seconds > 0.0) {
+        if !(-80.0..=-10.0).contains(&noise_db) || min_seconds <= 0.0 || !min_seconds.is_finite() {
             return Err(MediaError::ProcessFailed {
                 op: "detectSilence",
                 exit: "params".to_owned(),
