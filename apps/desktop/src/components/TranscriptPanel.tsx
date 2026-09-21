@@ -4,6 +4,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { JobEvent, ModelStatus, Transcript } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
+import { notifyTimelineChanged } from "../stores/useJobsStore";
 
 /**
  * Transcript panel (Phase 5 UI slice): transcribe an imported asset through
@@ -24,6 +25,8 @@ export function TranscriptPanel({
   const [busy, setBusy] = useState(false);
   const [modelBusy, setModelBusy] = useState(false);
   const [modelNote, setModelNote] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteNote, setDeleteNote] = useState<string | null>(null);
 
   async function onTranscribe(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -65,6 +68,32 @@ export function TranscriptPanel({
       setModelNote(e instanceof IpcError ? e.message : "Model download failed unexpectedly.");
     } finally {
       setModelBusy(false);
+    }
+  }
+
+  async function onRemoveSegment(index: number): Promise<void> {
+    if (!transcript || !transcript.segments[index]) return;
+    const segment = transcript.segments[index];
+    setDeleting(true);
+    setDeleteNote(null);
+    try {
+      await invokeCommand("apply_operations", {
+        goal: "transcript delete",
+        operations: [
+          {
+            type: "remove_range",
+            start: segment.start,
+            end: segment.end,
+            reason: `transcript delete: ${segment.text.slice(0, 60)}`,
+          },
+        ],
+      });
+      setDeleteNote(`Removed ${segment.start.toFixed(1)}s → ${segment.end.toFixed(1)}s (undo in the timeline).`);
+      notifyTimelineChanged();
+    } catch (e) {
+      setDeleteNote(e instanceof IpcError ? e.message : "Delete failed unexpectedly.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -119,10 +148,22 @@ export function TranscriptPanel({
             </button>
           ))}
           {active !== null && transcript.segments[active] && (
-            <p className="text-xs text-avid-muted">
-              Range {transcript.segments[active].start.toFixed(2)}s →{" "}
-              {transcript.segments[active].end.toFixed(2)}s — timeline seek lands with playback.
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-avid-muted">
+                Range {transcript.segments[active].start.toFixed(2)}s →{" "}
+                {transcript.segments[active].end.toFixed(2)}s — timeline seek lands with playback.
+              </p>
+              <div>
+                <Button
+                  variant="danger"
+                  disabled={deleting}
+                  onClick={() => active !== null && onRemoveSegment(active)}
+                >
+                  {deleting ? "Removing…" : "Remove from timeline"}
+                </Button>
+              </div>
+              {deleteNote && <p className="text-xs text-avid-secondary">{deleteNote}</p>}
+            </div>
           )}
         </div>
       )}

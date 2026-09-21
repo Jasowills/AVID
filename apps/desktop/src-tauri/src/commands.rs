@@ -894,6 +894,32 @@ pub async fn render_export(
     outcome
 }
 
+/// Extract a thumbnail frame for a video asset. Returns the
+/// project-relative path (`thumbnails/<id>.png`). Sync and fast (~100 ms);
+/// thumbnails are cache, not manifest state.
+#[tauri::command]
+pub fn thumbnail_asset(
+    state: State<'_, crate::AppState>,
+    asset_id: String,
+) -> Result<String, CommandError> {
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    state.with_session(|session| {
+        let asset = session
+            .manifest()
+            .assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        let dir = session.dir().to_path_buf();
+        crate::session::Session::thumbnail_asset(&engine, &dir, &asset)?;
+        Ok(format!("thumbnails/{asset_id}.png"))
+    })
+}
+
 /// List imported assets for the media library UI.
 #[tauri::command]
 pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>, CommandError> {

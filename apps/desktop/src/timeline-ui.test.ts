@@ -8,8 +8,8 @@ const TIMELINE: Timeline = {
     { id: "a1", kind: "audio", index: 0, name: "A1", locked: false, muted: false },
   ],
   clips: {
-    a: { id: "a", source_media_id: "m", track_id: "v1", start: 0, duration: 10, in_point: 0, name: "A" },
-    b: { id: "b", source_media_id: "m", track_id: "nope", start: 5, duration: 2, in_point: 0, name: "B" },
+    a: { id: "a", source_media_id: "m", track_id: "v1", start: 0, duration: 10, in_point: 0, volume: 1, muted: false, name: "A" },
+    b: { id: "b", source_media_id: "m", track_id: "nope", start: 5, duration: 2, in_point: 0, volume: 0.5, muted: false, name: "B" },
   },
 };
 

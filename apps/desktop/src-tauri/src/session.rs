@@ -478,6 +478,36 @@ impl Session {
         Ok(output)
     }
 
+    /// Extract a thumbnail frame for a video asset (`thumbnails/<id>.png`).
+    /// Thumbnails are regenerable cache, not manifest state — the path is
+    /// returned, never stored. Frame at ~10% duration (min 0.5 s in).
+    pub fn thumbnail_asset(
+        engine: &MediaEngine,
+        dir: &Path,
+        asset: &MediaAsset,
+    ) -> Result<PathBuf, CommandError> {
+        if asset.dimensions.is_none() {
+            return Err(CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Thumbnails are for video files.".to_owned(),
+            });
+        }
+        let thumbs = dir.join("thumbnails");
+        std::fs::create_dir_all(&thumbs).map_err(|e| CommandError {
+            code: "AVID_PROJECT_001".to_owned(),
+            message: format!("AVID couldn't prepare the thumbnails folder: {e}"),
+        })?;
+        let at = asset
+            .duration
+            .map_or(1.0, |duration| (duration * 0.1).max(0.5));
+        let output = thumbs.join(format!("{}.png", asset.id));
+        let source = dir.join(&asset.relative_path);
+        engine
+            .extract_frame(&source, at, &output)
+            .map_err(|error| command_error_from_media(&error))?;
+        Ok(output)
+    }
+
     /// Record a generated proxy path and persist.
     pub fn set_proxy_path(
         &mut self,
@@ -949,6 +979,16 @@ mod tests {
         });
         let err = session.generate_proxy(&engine, "audio-1").unwrap_err();
         assert_eq!(err.code, "AVID_MEDIA_001");
+        let audio = session
+            .manifest()
+            .assets
+            .iter()
+            .find(|a| a.id == "audio-1")
+            .cloned()
+            .unwrap();
+        let thumb_err =
+            crate::session::Session::thumbnail_asset(&engine, &dir, &audio).unwrap_err();
+        assert_eq!(thumb_err.code, "AVID_MEDIA_001");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -979,6 +1019,11 @@ mod tests {
             std::fs::metadata(&proxy_file).unwrap().len()
                 < std::fs::metadata(&fixture).unwrap().len()
         );
+        // Thumbnail from the same session: real PNG frame.
+        let thumb = Session::thumbnail_asset(&engine, &dir, &asset).unwrap();
+        assert!(dir.join(&thumb).is_file());
+        let png = std::fs::read(dir.join(&thumb)).unwrap();
+        assert!(png.starts_with(&[0x89, b'P', b'N', b'G']), "must be a PNG");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1230,7 +1275,9 @@ mod tests {
         });
         session.save_visual_scene("kafka", spec.clone()).unwrap();
         assert!(session.save_visual_scene("../evil", spec).is_err());
-        assert!(session.save_visual_scene("ok", serde_json::json!({"no": "scene"})).is_err());
+        assert!(session
+            .save_visual_scene("ok", serde_json::json!({"no": "scene"}))
+            .is_err());
         assert_eq!(session.list_visual_scenes().len(), 1);
 
         session.place_visual_on_timeline("kafka", 4.0).unwrap();

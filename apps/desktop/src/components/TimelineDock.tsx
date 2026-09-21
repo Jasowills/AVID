@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Clip, Timeline } from "@avid/shared-types";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 import { TIMELINE_CHANGED_EVENT } from "../stores/useJobsStore";
@@ -22,6 +22,7 @@ export function TimelineDock({
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const backend = isTauri();
 
   const refresh = useCallback(async () => {
@@ -44,6 +45,50 @@ export function TimelineDock({
     return () => window.removeEventListener(TIMELINE_CHANGED_EVENT, refresh);
   }, [refresh]);
 
+  const selected: Clip | null =
+    selectedId && timeline ? (timeline.clips[selectedId] ?? null) : null;
+  const mutateRef = useRef(mutate);
+  mutateRef.current = mutate;
+
+  // Keyboard editing: S split, Delete remove, Cmd/Ctrl+Z undo, +Shift redo.
+  // Skipped inside text fields; browser build shows the same disabled honesty.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!backend || busy) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        const redo = event.shiftKey;
+        void mutateRef.current(redo ? "Redo" : "Undo", () =>
+          invokeCommand<string>(redo ? "timeline_redo" : "timeline_undo"),
+        );
+      } else if (!mod && (event.key === "Delete" || event.key === "Backspace") && selected) {
+        const id = selected.id;
+        void mutateRef.current("Remove", () =>
+          invokeCommand("timeline_remove_clip", { clipId: id }),
+        );
+      } else if (!mod && event.key.toLowerCase() === "s" && selected) {
+        const id = selected.id;
+        const at = selected.start + selected.duration / 2;
+        void mutateRef.current("Split", () =>
+          invokeCommand("timeline_split_clip", { clipId: id, at }),
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [backend, busy, selected]);
+
   async function mutate(label: string, run: () => Promise<unknown>): Promise<void> {
     setBusy(true);
     try {
@@ -62,8 +107,6 @@ export function TimelineDock({
     }
   }
 
-  const selected: Clip | null = selectedId && timeline ? (timeline.clips[selectedId] ?? null) : null;
-
   const disabledTitle = backend
     ? undefined
     : "Timeline editing needs the desktop backend (running in the browser).";
@@ -72,6 +115,21 @@ export function TimelineDock({
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-2 pb-2">
         <span className="text-xs font-medium text-avid-secondary">Timeline</span>
+        <span className="flex items-center gap-0.5" role="group" aria-label="Zoom">
+          {[0.5, 1, 2, 4].map((level) => (
+            <button
+              key={level}
+              onClick={() => setZoom(level)}
+              aria-pressed={zoom === level}
+              title={`Zoom ${level}x`}
+              className={`rounded-avid-sm px-1.5 py-1 font-mono text-[11px] ${
+                zoom === level ? "bg-avid-raised text-avid-primary" : "text-avid-muted hover:text-avid-secondary"
+              }`}
+            >
+              {level}x
+            </button>
+          ))}
+        </span>
         <span className="ml-auto flex items-center gap-1">
           <button
             disabled={!backend || busy || !selected}
@@ -117,7 +175,7 @@ export function TimelineDock({
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-avid-md border border-avid-border-subtle">
         {timeline ? (
-          <TimelineCanvas timeline={timeline} selectedId={selectedId} onSelect={onSelect} />
+          <TimelineCanvas timeline={timeline} selectedId={selectedId} onSelect={onSelect} zoom={zoom} />
         ) : (
           <div className="flex h-full items-center justify-center p-4">
             <p className="text-xs text-avid-muted">

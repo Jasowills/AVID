@@ -4,6 +4,7 @@ import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { MediaAsset, MediaInfo } from "@avid/shared-types";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
+import { streamUrl } from "./PreviewPane";
 
 export interface ImportedAsset {
   id: string;
@@ -35,6 +36,8 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
   const [importError, setImportError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [thumbBusy, setThumbBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -71,6 +74,18 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
       setImportError(e instanceof IpcError ? e.message : "Import failed unexpectedly.");
     } finally {
       setImportBusy(false);
+    }
+  }
+
+  async function onThumbnail(assetId: string): Promise<void> {
+    setThumbBusy(assetId);
+    try {
+      const relative = await invokeCommand<string>("thumbnail_asset", { assetId });
+      setThumbs((prev) => ({ ...prev, [assetId]: relative }));
+    } catch (e) {
+      setImportError(e instanceof IpcError ? e.message : "Thumbnail failed unexpectedly.");
+    } finally {
+      setThumbBusy(null);
     }
   }
 
@@ -165,13 +180,31 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
                   <span className="block truncate font-mono text-[11px] text-avid-muted">
                     {asset.id} · {formatDuration(asset.duration)}
                   </span>
+                  {thumbs[asset.id] && (
+                    <img
+                      src={streamUrl("project", thumbs[asset.id] as string)}
+                      alt={`Thumbnail of ${asset.file_name}`}
+                      className="mt-1 h-16 rounded-avid-sm border border-avid-border object-cover"
+                    />
+                  )}
                 </span>
-                <button
-                  onClick={() => onTranscribeAsset(asset.id)}
-                  className="shrink-0 rounded-avid-sm px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
-                >
-                  Transcribe →
-                </button>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  {asset.dimensions && (
+                    <button
+                      onClick={() => onThumbnail(asset.id)}
+                      disabled={thumbBusy === asset.id}
+                      className="rounded-avid-sm px-2 py-1 text-xs text-avid-secondary hover:bg-avid-raised disabled:opacity-50"
+                    >
+                      {thumbBusy === asset.id ? "…" : "Thumbnail"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onTranscribeAsset(asset.id)}
+                    className="rounded-avid-sm px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
+                  >
+                    Transcribe →
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

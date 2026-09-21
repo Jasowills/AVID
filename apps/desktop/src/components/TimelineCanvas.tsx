@@ -5,6 +5,8 @@ export interface TimelineCanvasProps {
   timeline: Timeline;
   selectedId: string | null;
   onSelect: (clipId: string | null) => void;
+  /** Horizontal zoom multiplier (default 1). */
+  zoom?: number;
 }
 
 /**
@@ -12,8 +14,8 @@ export interface TimelineCanvasProps {
  * Deterministic SVG (not canvas) — accessible roles, no hit-test code,
  * layout math unit-tested in `timelineLayout`.
  */
-export function TimelineCanvas({ timeline, selectedId, onSelect }: TimelineCanvasProps) {
-  const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId);
+export function TimelineCanvas({ timeline, selectedId, onSelect, zoom = 1 }: TimelineCanvasProps) {
+  const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId, zoom);
 
   return (
     <svg

@@ -2,6 +2,20 @@ import { Link } from "react-router-dom";
 import { Button, EmptyState, Panel } from "@avid/ui";
 import { useProjectStore } from "../stores/useProjectStore";
 
+function providerSummary(): string | null {
+  try {
+    const raw = localStorage.getItem("avid.provider.v1");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { baseUrl?: unknown; model?: unknown };
+    if (typeof parsed.baseUrl === "string" && typeof parsed.model === "string") {
+      return `${parsed.model} @ ${parsed.baseUrl}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Home screen (AGENTS §35): recents, create, templates, examples, AI status. */
 export function Home() {
   const projects = useProjectStore((s) => s.projects);
@@ -31,7 +45,7 @@ export function Home() {
                 <Link to="/projects/new">
                   <Button variant="primary">Create project</Button>
                 </Link>
-                <Button disabled title="Example projects land in Phase 9">
+                <Button disabled title="Example gallery ships with the template browser (Phase 9)">
                   Try an example
                 </Button>
               </>
@@ -68,13 +82,35 @@ export function Home() {
             Phase 9.
           </p>
         </Panel>
-        <Panel title="Local AI status">
-          <p className="text-sm text-avid-secondary">
-            No provider configured. Ollama + local Whisper wiring lands in Phase 5–6. Basic editing
-            works offline regardless.
-          </p>
+        <Panel
+          title="Local AI status"
+          actions={
+            <Link to="/settings" className="text-xs text-avid-accent hover:underline">
+              Settings →
+            </Link>
+          }
+        >
+          <AiStatusBody />
         </Panel>
       </div>
     </main>
+  );
+}
+
+function AiStatusBody(): JSX.Element {
+  const configured = providerSummary();
+  if (!configured) {
+    return (
+      <p className="text-sm text-avid-secondary">
+        No provider tested yet — Ollama at <span className="font-mono">localhost:11434</span>{" "}
+        works out of the box. Open Settings to test a connection. Basic editing works offline
+        regardless.
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm text-avid-secondary">
+      Last tested: <span className="font-mono">{configured}</span>. Change it any time in Settings.
+    </p>
   );
 }

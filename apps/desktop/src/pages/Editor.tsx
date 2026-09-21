@@ -12,6 +12,7 @@ import { isTauri } from "../lib/ipc";
 import { TimelineDock } from "../components/TimelineDock";
 import { TopBar } from "../components/TopBar";
 import { TranscriptPanel } from "../components/TranscriptPanel";
+import { VisualsPanel } from "../components/VisualsPanel";
 import { useProjectStore } from "../stores/useProjectStore";
 
 /**
@@ -19,7 +20,7 @@ import { useProjectStore } from "../stores/useProjectStore";
  * Media ingestion (Phase 2), timeline engine (Phase 3), and AI (Phase 6+)
  * plug into the placeholder regions below. Empty states guide, per §57.
  */
-const ACTIVE_TABS = ["Media", "Transcript", "AI", "Jobs"] as const;
+const ACTIVE_TABS = ["Media", "Transcript", "AI", "Jobs", "Visuals"] as const;
 type ActiveTab = (typeof ACTIVE_TABS)[number];
 const COMING_TABS = ["Scenes", "Templates", "Assets", "Audio", "Captions"] as const;
 
@@ -97,8 +98,10 @@ export function Editor() {
             <TranscriptPanel assetId={transcriptAssetId} onAssetId={setTranscriptAssetId} />
           ) : tab === "AI" ? (
             <AiPanel />
-          ) : (
+          ) : tab === "Jobs" ? (
             <JobsPanel />
+          ) : (
+            <VisualsPanel />
           )}
         </aside>
 

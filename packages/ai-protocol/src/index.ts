@@ -346,3 +346,6 @@ export function validateSceneSpec(input: unknown): SceneValidationResult {
     errors: [],
   };
 }
+
+export * from "./mermaid";
+export * from "./scene-svg";
