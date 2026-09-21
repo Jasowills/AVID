@@ -191,8 +191,8 @@ export function AiPanel() {
             className="rounded-avid-md border border-avid-border bg-avid-raised px-3 py-2 font-mono text-xs text-avid-primary focus-visible:outline-2 focus-visible:outline-avid-accent"
           />
         </label>
-        <div className="flex items-end gap-3">
-          <label className="flex flex-1 flex-col gap-1 text-sm text-avid-secondary">
+        <div className="flex flex-col gap-2">
+          <label className="flex flex-col gap-1 text-sm text-avid-secondary">
             Min silence (s)
             <input
               value={minSilence}
@@ -201,18 +201,20 @@ export function AiPanel() {
               className="rounded-avid-md border border-avid-border bg-avid-raised px-3 py-2 text-sm text-avid-primary focus-visible:outline-2 focus-visible:outline-avid-accent"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-avid-secondary">
-            <input
-              type="checkbox"
-              checked={includeFillers}
-              onChange={(e) => setIncludeFillers(e.target.checked)}
-              className="accent-avid-accent"
-            />
-            Fillers
-          </label>
-          <Button type="submit" variant="secondary" disabled={proposing || proposalAsset.trim() === ""} className="min-w-32">
-            {proposing ? `Analyzing ${proposalAsset.trim().slice(0, 12)}…` : "Propose"}
-          </Button>
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm text-avid-secondary">
+              <input
+                type="checkbox"
+                checked={includeFillers}
+                onChange={(e) => setIncludeFillers(e.target.checked)}
+                className="accent-avid-accent"
+              />
+              Fillers
+            </label>
+            <Button type="submit" variant="secondary" disabled={proposing || proposalAsset.trim() === ""}>
+              {proposing ? `Analyzing ${proposalAsset.trim().slice(0, 12)}…` : "Propose"}
+            </Button>
+          </div>
         </div>
         {proposalNote && <p className="text-xs text-avid-muted">{proposalNote}</p>}
         {analyzedBy && (

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Workspace sources: Tailwind v4 auto-detects content under the Vite root
+   (apps/desktop) only. Shared-component classes in packages/ui would
+   otherwise never generate utilities (e.g. bg-avid-action on Button). */
+@source "../../../packages/ui/src";
+
 /* AVID theme (Tailwind v4). Utilities bind to runtime variables via
    `@theme inline`, so switching `data-theme` (or a preset) repaints the
    whole app with no rebuild. Values live in `packages/design-system`
