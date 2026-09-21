@@ -57,6 +57,12 @@ export function TimelineDock({
     void mutate("Move", () => invokeCommand("timeline_move_clip", { clipId, start }));
   };
 
+  const handleToggleLock = (trackId: string, locked: boolean): void => {
+    void mutate(locked ? "Lock track" : "Unlock track", () =>
+      invokeCommand("timeline_set_track_locked", { trackId, locked }),
+    );
+  };
+
   const handleTrim = (clipId: string, start: number, duration: number): void => {
     void mutate("Trim", () =>
       invokeCommand("timeline_trim_clip", { clipId, start, duration }),
@@ -197,6 +203,7 @@ export function TimelineDock({
             onSeek={backend ? (time) => requestSeek(time) : undefined}
             onMoveClip={backend ? handleMove : undefined}
             onTrimClip={backend ? handleTrim : undefined}
+            onToggleLock={backend ? handleToggleLock : undefined}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-4">

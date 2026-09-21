@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Clip, MediaAsset, Timeline } from "@avid/shared-types";
+import { Icon } from "@avid/ui";
 import { invokeCommand, isTauri } from "../lib/ipc";
 import { TIMELINE_CHANGED_EVENT } from "../stores/useJobsStore";
 import { usePlaybackStore } from "../stores/usePlaybackStore";
@@ -31,6 +32,7 @@ export function PreviewPane({ clipId }: PreviewPaneProps) {
   const [label, setLabel] = useState<string>("Preview");
   const [notice, setNotice] = useState<string | null>(null);
   const [time, setTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const seekRequest = usePlaybackStore((state) => state.seekRequest);
   const reportTime = usePlaybackStore((state) => state.reportTime);
@@ -116,6 +118,8 @@ export function PreviewPane({ clipId }: PreviewPaneProps) {
       <video
         key={src}
         ref={videoRef}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
         src={src}
         controls
         preload="metadata"
@@ -127,10 +131,24 @@ export function PreviewPane({ clipId }: PreviewPaneProps) {
         }}
         className="aspect-video w-full rounded-avid-lg border border-avid-border bg-black"
       />
-      <p className="text-xs text-avid-muted">
-        {label}
-        {src.includes("/proxies/") ? " · proxy" : " · original"} · {time.toFixed(1)}s
-      </p>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => {
+            const video = videoRef.current;
+            if (!video) return;
+            if (video.paused) void video.play().catch(() => undefined);
+            else video.pause();
+          }}
+          aria-label={playing ? "Pause preview" : "Play preview"}
+          className="rounded-avid-sm bg-avid-raised px-2.5 py-1 text-xs text-avid-primary hover:bg-avid-overlay"
+        >
+          {playing ? <Icon name="pause" size={13} /> : <Icon name="play" size={13} />}
+        </button>
+        <p className="text-xs text-avid-muted">
+          {label}
+          {src.includes("/proxies/") ? " · proxy" : " · original"} · {time.toFixed(1)}s
+        </p>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Channel } from "@tauri-apps/api/core";
 import { EXPORT_PRESETS, type ExportResult, type JobEvent, type Timeline } from "@avid/shared-types";
-import { Button, Panel } from "@avid/ui";
+import { Button, Icon, Panel } from "@avid/ui";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 
 export interface ExportDialogProps {
@@ -101,8 +101,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
           title="Export video"
           className="w-full max-w-md"
           actions={
-            <button onClick={onClose} aria-label="Close export dialog" className="text-avid-muted hover:text-avid-primary">
-              ✕
+            <button onClick={onClose} aria-label="Close export dialog" className="rounded-avid-sm p-1 text-avid-muted hover:text-avid-primary">
+              <Icon name="close" size={14} />
             </button>
           }
         >

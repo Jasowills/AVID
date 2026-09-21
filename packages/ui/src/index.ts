@@ -12,3 +12,5 @@ export { TextField } from "./TextField";
 export type { TextFieldProps } from "./TextField";
 export { EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
+export { Icon } from "./Icon";
+export type { IconName, IconProps } from "./Icon";

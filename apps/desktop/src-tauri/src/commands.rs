@@ -370,6 +370,15 @@ pub fn timeline_split_clip(
 }
 
 #[tauri::command]
+pub fn timeline_set_track_locked(
+    state: State<'_, crate::AppState>,
+    track_id: String,
+    locked: bool,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.set_track_locked(&track_id, locked))
+}
+
+#[tauri::command]
 pub fn timeline_move_clip(
     state: State<'_, crate::AppState>,
     clip_id: String,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Button, EmptyState, Panel, TextField } from "@avid/ui";
+import { Button, EmptyState, Icon, Panel, TextField } from "@avid/ui";
 import type { MediaAsset, MediaInfo } from "@avid/shared-types";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
@@ -235,7 +235,7 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
                       : "text-avid-muted hover:text-avid-secondary"
                   }`}
                 >
-                  {mode === "grid" ? "▦" : "☰"}
+                  {mode === "grid" ? <Icon name="grid" size={13} /> : <Icon name="list" size={13} />}
                 </button>
               ))}
             </span>
@@ -258,8 +258,8 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
                         loading="lazy"
                       />
                     ) : (
-                      <span className="flex h-full items-center justify-center text-lg text-avid-muted" aria-hidden="true">
-                        {asset.dimensions ? "▦" : "♪"}
+                      <span className="flex h-full items-center justify-center text-avid-muted">
+                        <Icon name={asset.dimensions ? "film" : "music"} size={22} />
                       </span>
                     )}
                     {asset.duration !== null && (

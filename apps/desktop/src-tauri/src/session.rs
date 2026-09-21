@@ -353,6 +353,22 @@ impl Session {
         )
     }
 
+    /// Set a track's locked state (persisted; part of project state, not undoable
+    /// history — locks guard edits rather than being edits themselves).
+    pub fn set_track_locked(&mut self, track_id: &str, locked: bool) -> Result<(), CommandError> {
+        let track = self
+            .timeline
+            .tracks
+            .iter_mut()
+            .find(|track| track.id == track_id)
+            .ok_or_else(|| CommandError {
+                code: "AVID_TIMELINE_003".to_owned(),
+                message: "Unknown track.".to_owned(),
+            })?;
+        track.locked = locked;
+        self.persist()
+    }
+
     /// Undo the last step and persist.
     pub fn undo(&mut self) -> Result<String, CommandError> {
         let label = self
@@ -1087,6 +1103,30 @@ mod tests {
         assert_eq!(session.timeline().clips["a"].start, 10.0);
         session.undo().unwrap();
         assert_eq!(session.timeline().clips["a"].start, 0.0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn track_lock_blocks_edits_and_persists() {
+        let dir = std::env::temp_dir().join("avid-lock-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("lk")).unwrap();
+        session.add_clip(clip("a", 0.0, 4.0)).unwrap();
+        session.set_track_locked("v1", true).unwrap();
+        assert!(session.remove_clip("a").is_err());
+        session.set_track_locked("v1", false).unwrap();
+        session.remove_clip("a").unwrap();
+        assert!(session.set_track_locked("nope", true).is_err());
+        let loaded = Session::load(dir.clone()).unwrap();
+        assert!(
+            !loaded
+                .timeline()
+                .tracks
+                .iter()
+                .find(|t| t.id == "v1")
+                .unwrap()
+                .locked
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

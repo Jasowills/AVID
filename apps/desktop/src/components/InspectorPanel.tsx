@@ -131,6 +131,7 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
         </div>
       </dl>
       <form onSubmit={onTrim} className="mt-3 flex flex-col gap-2 border-t border-avid-border-subtle pt-3">
+        <h3 className="text-xs font-medium text-avid-secondary">Trim</h3>
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-1 text-xs text-avid-secondary">
             Start (s)
@@ -146,6 +147,7 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
         </Button>
       </form>
       <form onSubmit={onAudio} className="mt-3 flex flex-col gap-2 border-t border-avid-border-subtle pt-3">
+        <h3 className="text-xs font-medium text-avid-secondary">Audio</h3>
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-1 text-xs text-avid-secondary">
             Volume 0–4

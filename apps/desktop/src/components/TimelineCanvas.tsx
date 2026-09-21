@@ -26,6 +26,8 @@ export interface TimelineCanvasProps {
   onMoveClip?: (clipId: string, start: number) => void;
   /** Drag-trim commit (new start + duration). Absent disables trimming. */
   onTrimClip?: (clipId: string, start: number, duration: number) => void;
+  /** Track lock toggle. Absent hides lock buttons. */
+  onToggleLock?: (trackId: string, locked: boolean) => void;
 }
 
 interface DragState {
@@ -56,6 +58,7 @@ export function TimelineCanvas({
   onSeek,
   onMoveClip,
   onTrimClip,
+  onToggleLock,
 }: TimelineCanvasProps) {
   const scale = PX_PER_SECOND * zoom;
   const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId, zoom);
@@ -217,6 +220,54 @@ export function TimelineCanvas({
           <text x={8} y={28 + lane * LANE_HEIGHT + 24} fill="#6b7480" fontSize={11}>
             {track.name}
           </text>
+          {onToggleLock && (
+            <g
+              role="button"
+              aria-label={`${track.locked ? "Unlock" : "Lock"} track ${track.name}`}
+              aria-pressed={track.locked}
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLock(track.id, !track.locked);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleLock(track.id, !track.locked);
+                }
+              }}
+              style={{ cursor: "pointer" }}
+            >
+              <rect
+                x={38}
+                y={28 + lane * LANE_HEIGHT + 8}
+                width={24}
+                height={24}
+                fill="transparent"
+              >
+                <title>{track.locked ? "Unlock track" : "Lock track"}</title>
+              </rect>
+              <rect
+                x={43}
+                y={28 + lane * LANE_HEIGHT + 19}
+                width={10}
+                height={8}
+                rx={1.5}
+                fill={track.locked ? "#e8eaed" : "none"}
+                stroke="#6b7480"
+                strokeWidth={1.5}
+                pointerEvents="none"
+              />
+              <path
+                d={`M ${45} ${28 + lane * LANE_HEIGHT + 19} v -3 a 3 3 0 0 1 6 0 v 3`}
+                fill="none"
+                stroke={track.locked ? "#e8eaed" : "#6b7480"}
+                strokeWidth={1.5}
+                pointerEvents="none"
+              />
+            </g>
+          )}
           <line
             x1={GUTTER_WIDTH}
             x2={totalWidth}
