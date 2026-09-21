@@ -3,4 +3,4 @@
  * screenshot or bug report can be tied to an exact commit. Not user-facing
  * product UI; rendered tiny in the Home footer.
  */
-export const BUILD_ID = "66c17f6 · 2026-09-21";
+export const BUILD_ID = "b5a8148 · 2026-09-21";
