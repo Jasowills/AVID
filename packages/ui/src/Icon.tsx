@@ -5,6 +5,7 @@ import {
   Clock,
   Film,
   Folder,
+  House,
   Info,
   Layers,
   LayoutGrid,
@@ -61,6 +62,7 @@ const icons = {
   volume: Volume2,
   mute: VolumeX,
   folder: Folder,
+  house: House,
   zoom: ZoomIn,
 } satisfies Record<string, LucideIcon>;
 

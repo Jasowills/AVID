@@ -1,23 +1,38 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
+import { loadProviderSummary } from "../lib/provider";
 import { selectOpenProject, useProjectStore } from "../stores/useProjectStore";
-import { runningCount, useJobsStore } from "../stores/useJobsStore";
-import { useEffect } from "react";
+import { notifyTimelineChanged, runningCount, useJobsStore } from "../stores/useJobsStore";
 
 export interface TopBarProps {
-  /** "Saved · 12:04" style status. Autosave indicator lands in Phase 3. */
+  /** Save status text; Editor passes the autosave state. */
   saveStatus?: string;
   /** Opens the export dialog. Absent in contexts without a timeline. */
   onExport?: () => void;
 }
 
 /**
- * Editor top bar (AGENTS §39): project name, undo/redo (wired in Phase 3),
- * save status, AI status, preview quality (Phase 4), Export (Phase 4), Settings.
- * Unwired controls are visibly disabled with honest titles — never fake buttons.
+ * Editor top bar: project name, working undo/redo, save status, live AI
+ * provider pill, job activity, Export, Settings. Controls that need the
+ * backend disable honestly outside Tauri — never fake buttons.
  */
 export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) {
   const navigate = useNavigate();
   const project = useProjectStore(selectOpenProject);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const backend = isTauri();
+  const provider = loadProviderSummary();
+
+  async function history(action: "timeline_undo" | "timeline_redo"): Promise<void> {
+    setUndoError(null);
+    try {
+      await invokeCommand(action);
+      notifyTimelineChanged();
+    } catch (e) {
+      setUndoError(e instanceof IpcError ? e.message : "History unavailable.");
+    }
+  }
   const jobs = useJobsStore((s) => s.jobs);
   const startPolling = useJobsStore((s) => s.startPolling);
   const running = runningCount(jobs);
@@ -41,20 +56,27 @@ export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) 
 
       <div className="ml-2 flex items-center gap-1" role="toolbar" aria-label="Edit">
         <button
-          disabled
-          title="Undo (lands in Phase 3 with the command engine)"
-          className="rounded-avid-sm px-2 py-1 text-sm text-avid-muted disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => history("timeline_undo")}
+          disabled={!backend || !project}
+          title={backend ? "Undo (Cmd/Ctrl+Z)" : "Undo needs the desktop backend"}
+          className="rounded-avid-sm px-2 py-1 text-sm text-avid-secondary hover:bg-avid-raised disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           Undo
         </button>
         <button
-          disabled
-          title="Redo (lands in Phase 3 with the command engine)"
-          className="rounded-avid-sm px-2 py-1 text-sm text-avid-muted disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => history("timeline_redo")}
+          disabled={!backend || !project}
+          title={backend ? "Redo (Cmd/Ctrl+Shift+Z)" : "Redo needs the desktop backend"}
+          className="rounded-avid-sm px-2 py-1 text-sm text-avid-secondary hover:bg-avid-raised disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           Redo
         </button>
       </div>
+      {undoError && (
+        <span role="alert" className="max-w-48 truncate text-xs text-avid-danger" title={undoError}>
+          {undoError}
+        </span>
+      )}
 
       <span className="text-xs text-avid-muted">{saveStatus}</span>
 
@@ -69,13 +91,17 @@ export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) 
       )}
 
       <div className="ml-auto flex items-center gap-3">
-        <span
-          className="inline-flex items-center gap-1.5 text-xs text-avid-secondary"
-          title="AI runtime status (provider wiring lands in Phase 6)"
+        <Link
+          to="/settings"
+          className="inline-flex items-center gap-1.5 rounded-avid-sm px-2 py-1 text-xs text-avid-secondary hover:bg-avid-raised"
+          title={provider ? `Provider: ${provider.model} @ ${provider.baseUrl}` : "No provider tested yet — open Settings"}
         >
-          <span aria-hidden="true" className="inline-block size-2 rounded-full bg-avid-muted" />
-          AI: not configured
-        </span>
+          <span
+            aria-hidden="true"
+            className={`inline-block size-2 rounded-full ${provider ? "bg-avid-success" : "bg-avid-muted"}`}
+          />
+          AI: {provider ? provider.model : "defaults"}
+        </Link>
         <button
           onClick={onExport}
           disabled={!onExport}

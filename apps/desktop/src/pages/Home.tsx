@@ -1,116 +1,133 @@
 import { Link } from "react-router-dom";
-import { Button, EmptyState, Panel } from "@avid/ui";
+import { useEffect } from "react";
+import { Button, EmptyState, Icon, Panel } from "@avid/ui";
+import { NavRail } from "../components/NavRail";
+import { loadProviderSummary } from "../lib/provider";
+import { runningCount, useJobsStore } from "../stores/useJobsStore";
 import { useProjectStore } from "../stores/useProjectStore";
 
-function providerSummary(): string | null {
-  try {
-    const raw = localStorage.getItem("avid.provider.v1");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { baseUrl?: unknown; model?: unknown };
-    if (typeof parsed.baseUrl === "string" && typeof parsed.model === "string") {
-      return `${parsed.model} @ ${parsed.baseUrl}`;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Home screen (AGENTS §35): recents, create, templates, examples, AI status. */
+/**
+ * Home dashboard: slim nav rail + project cards + honest status panels.
+ * No metrics, no decoration — resume work, create, or configure.
+ */
 export function Home() {
   const projects = useProjectStore((s) => s.projects);
   const openProject = useProjectStore((s) => s.openProject);
+  const jobs = useJobsStore((s) => s.jobs);
+  const startPolling = useJobsStore((s) => s.startPolling);
+  const provider = loadProviderSummary();
+  const running = runningCount(jobs);
+
+  useEffect(() => {
+    startPolling();
+  }, [startPolling]);
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Welcome to AVID</h1>
-          <p className="text-sm text-avid-secondary">
-            Local-first AI video editing. Import → Understand → Edit → Visualize → Export.
-          </p>
-        </div>
-        <Link to="/projects/new">
-          <Button variant="primary">Create project</Button>
-        </Link>
-      </div>
+    <div className="flex h-full bg-avid-base text-avid-primary">
+      <NavRail />
 
-      <Panel title="Recent projects">
-        {projects.length === 0 ? (
-          <EmptyState
-            title="No projects yet"
-            body="Create a project to start editing, or open an example to inspect a finished timeline."
-            actions={
-              <>
-                <Link to="/projects/new">
-                  <Button variant="primary">Create project</Button>
-                </Link>
-                <Button disabled title="Example gallery ships with the template browser (Phase 9)">
-                  Try an example
-                </Button>
-              </>
-            }
-          />
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {projects.map((p) => (
-              <li key={p.id}>
-                <Link
-                  to={`/editor/${p.id}`}
-                  onClick={() => openProject(p.id)}
-                  className="flex items-center justify-between rounded-avid-md border border-avid-border bg-avid-raised px-4 py-3 hover:border-avid-border-strong"
-                >
-                  <span>
-                    <span className="block text-sm font-medium text-avid-primary">{p.name}</span>
-                    <span className="block text-xs text-avid-muted">
-                      {p.canvas} · {p.frameRate}fps · {p.resolution} · edited{" "}
-                      {new Date(p.updatedAt).toLocaleString()}
-                    </span>
-                  </span>
-                  <span className="text-sm text-avid-secondary">Open →</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Panel title="Templates">
-          <p className="text-sm text-avid-secondary">
-            Data-driven editing templates (technical explainer, talking head, podcast…) land in
-            Phase 9.
-          </p>
-        </Panel>
-        <Panel
-          title="Local AI status"
-          actions={
-            <Link to="/settings" className="text-xs text-avid-accent hover:underline">
-              Settings →
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-5xl flex-col gap-5 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-semibold">Projects</h1>
+              <p className="text-sm text-avid-secondary">
+                {projects.length === 0
+                  ? "Create a project to start editing."
+                  : `${projects.length} project${projects.length === 1 ? "" : "s"}, most recent first.`}
+              </p>
+            </div>
+            <Link to="/projects/new">
+              <Button variant="primary">New project</Button>
             </Link>
-          }
-        >
-          <AiStatusBody />
-        </Panel>
-      </div>
-    </main>
-  );
-}
+          </div>
 
-function AiStatusBody(): JSX.Element {
-  const configured = providerSummary();
-  if (!configured) {
-    return (
-      <p className="text-sm text-avid-secondary">
-        No provider tested yet — Ollama at <span className="font-mono">localhost:11434</span>{" "}
-        works out of the box. Open Settings to test a connection. Basic editing works offline
-        regardless.
-      </p>
-    );
-  }
-  return (
-    <p className="text-sm text-avid-secondary">
-      Last tested: <span className="font-mono">{configured}</span>. Change it any time in Settings.
-    </p>
+          {projects.length === 0 ? (
+            <EmptyState
+              title="No projects yet"
+              body="Create a project to start editing. Import footage, transcribe it, cut it, and export — everything stays on this machine."
+              actions={
+                <Link to="/projects/new">
+                  <Button variant="primary">New project</Button>
+                </Link>
+              }
+            />
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {projects.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    to={`/editor/${p.id}`}
+                    onClick={() => openProject(p.id)}
+                    className="block rounded-avid-lg border border-avid-border bg-avid-panel p-4 transition-colors hover:border-avid-border-strong"
+                  >
+                    <span className="block truncate text-sm font-medium text-avid-primary" title={p.name}>
+                      {p.name}
+                    </span>
+                    <span className="mt-1 block font-mono text-xs text-avid-muted">
+                      {p.canvas} · {p.frameRate}fps · {p.resolution}
+                    </span>
+                    <span className="mt-2 flex items-center justify-between text-xs text-avid-muted">
+                      <span>Edited {new Date(p.updatedAt).toLocaleString()}</span>
+                      <span className="inline-flex items-center gap-1 text-avid-accent">
+                        Open <Icon name="chevronRight" size={13} />
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Panel title="Templates">
+              <p className="text-sm text-avid-secondary">
+                12 templates validate (technical explainer carries full content). The template
+                browser with preview and apply lands with Phase 9.
+              </p>
+            </Panel>
+            <Panel title="Examples">
+              <p className="text-sm text-avid-secondary">
+                1 shipped example project parses as manifest and timeline. The in-app gallery
+                arrives with the template browser.
+              </p>
+            </Panel>
+            <Panel
+              title="AI status"
+              actions={
+                <Link to="/settings" className="text-xs text-avid-accent hover:underline">
+                  Settings
+                </Link>
+              }
+            >
+              {provider ? (
+                <p className="text-sm text-avid-secondary">
+                  Last tested: <span className="font-mono">{provider.model}</span> @{" "}
+                  <span className="font-mono">{provider.baseUrl}</span>
+                </p>
+              ) : (
+                <p className="text-sm text-avid-secondary">
+                  No provider tested yet — Ollama at{" "}
+                  <span className="font-mono">localhost:11434</span> works out of the box. Basic
+                  editing works offline regardless.
+                </p>
+              )}
+            </Panel>
+            <Panel title="Background jobs">
+              {running > 0 ? (
+                <p className="text-sm text-avid-secondary">
+                  {running} task{running === 1 ? "" : "s"} running — open a project and use the
+                  Jobs tab for progress and cancel.
+                </p>
+              ) : (
+                <p className="text-sm text-avid-secondary">
+                  No jobs running. Exports and transcriptions report here with live progress.
+                </p>
+              )}
+            </Panel>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

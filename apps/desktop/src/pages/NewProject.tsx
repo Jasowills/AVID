@@ -6,7 +6,7 @@ import { FRAME_RATES, RESOLUTIONS, type NewProjectInput } from "@avid/shared-typ
 import { CANVAS_PRESETS, createProjectConfig, validateNewProject } from "../lib/project";
 import { useProjectStore } from "../stores/useProjectStore";
 
-/** New Project dialog as a page (AGENTS §37). Template picker lands in Phase 9. */
+/** New Project dialog as a page (AGENTS §37). Template picker arrives with the template browser. */
 export function NewProject() {
   const navigate = useNavigate();
   const addProject = useProjectStore((s) => s.addProject);

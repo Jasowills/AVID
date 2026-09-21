@@ -9,7 +9,7 @@ export interface ProviderProbe {
   message: string;
 }
 
-const STORAGE_KEY = "avid.provider.v1";
+import { loadProviderSummary, saveProviderSummary } from "../lib/provider";
 
 interface ProviderConfig {
   baseUrl: string;
@@ -18,20 +18,12 @@ interface ProviderConfig {
 }
 
 function loadConfig(): ProviderConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<ProviderConfig>;
-      return {
-        baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "http://localhost:11434",
-        model: typeof parsed.model === "string" ? parsed.model : "qwen2.5:7b",
-        apiKey: "",
-      };
-    }
-  } catch {
-    // Corrupt config falls back to local defaults.
-  }
-  return { baseUrl: "http://localhost:11434", model: "qwen2.5:7b", apiKey: "" };
+  const saved = loadProviderSummary();
+  return {
+    baseUrl: saved?.baseUrl ?? "http://localhost:11434",
+    model: saved?.model ?? "qwen2.5:7b",
+    apiKey: "",
+  };
 }
 
 /**
@@ -60,10 +52,7 @@ export function ProvidersPanel() {
         apiKey: config.apiKey.trim() === "" ? null : config.apiKey,
       });
       setProbe(result);
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ baseUrl: config.baseUrl.trim(), model: config.model.trim() }),
-      );
+      saveProviderSummary({ baseUrl: config.baseUrl.trim(), model: config.model.trim() });
     } catch (e) {
       setError(e instanceof IpcError ? e.message : "Probe failed unexpectedly.");
     } finally {
