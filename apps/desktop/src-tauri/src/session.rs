@@ -303,6 +303,26 @@ impl Session {
         self.mutate("Split clip", Box::new(SplitClipCommand::new(clip_id, at)))
     }
 
+    /// Move a clip in time (same track; cross-track drag lands later).
+    /// Undoable, persisted.
+    pub fn move_clip(&mut self, clip_id: &str, start: f64) -> Result<(), CommandError> {
+        let track_id = self
+            .timeline
+            .clips
+            .get(clip_id)
+            .map(|clip| clip.track_id.clone())
+            .ok_or_else(|| CommandError {
+                code: "AVID_TIMELINE_002".to_owned(),
+                message: "Unknown clip.".to_owned(),
+            })?;
+        self.mutate(
+            "Move clip",
+            Box::new(avid_timeline::MoveClipCommand::new(
+                clip_id, start, track_id,
+            )),
+        )
+    }
+
     /// Trim a clip to a new start/duration (undoable, persisted).
     pub fn trim_clip(
         &mut self,
@@ -1050,6 +1070,23 @@ mod tests {
             (1.0, false)
         );
         assert!(session.set_clip_audio("missing", 1.0, false).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn move_clip_repositions_and_undoes() {
+        let dir = std::env::temp_dir().join("avid-move-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("mv")).unwrap();
+        session.add_clip(clip("a", 0.0, 4.0)).unwrap();
+        session.add_clip(clip("b", 5.0, 4.0)).unwrap();
+        session.move_clip("a", 10.0).unwrap();
+        assert_eq!(session.timeline().clips["a"].start, 10.0);
+        // Overlap with b is rejected, timeline untouched by the failure.
+        assert!(session.move_clip("a", 6.0).is_err());
+        assert_eq!(session.timeline().clips["a"].start, 10.0);
+        session.undo().unwrap();
+        assert_eq!(session.timeline().clips["a"].start, 0.0);
         std::fs::remove_dir_all(&dir).ok();
     }
 

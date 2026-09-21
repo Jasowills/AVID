@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Clip, Timeline } from "@avid/shared-types";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
 import { TIMELINE_CHANGED_EVENT } from "../stores/useJobsStore";
+import { usePlaybackStore } from "../stores/usePlaybackStore";
 import { TimelineCanvas } from "./TimelineCanvas";
 
 /**
@@ -23,6 +24,8 @@ export function TimelineDock({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const currentTime = usePlaybackStore((state) => state.currentTime);
+  const requestSeek = usePlaybackStore((state) => state.requestSeek);
   const backend = isTauri();
 
   const refresh = useCallback(async () => {
@@ -49,6 +52,16 @@ export function TimelineDock({
     selectedId && timeline ? (timeline.clips[selectedId] ?? null) : null;
   const mutateRef = useRef(mutate);
   mutateRef.current = mutate;
+
+  const handleMove = (clipId: string, start: number): void => {
+    void mutate("Move", () => invokeCommand("timeline_move_clip", { clipId, start }));
+  };
+
+  const handleTrim = (clipId: string, start: number, duration: number): void => {
+    void mutate("Trim", () =>
+      invokeCommand("timeline_trim_clip", { clipId, start, duration }),
+    );
+  };
 
   // Keyboard editing: S split, Delete remove, Cmd/Ctrl+Z undo, +Shift redo.
   // Skipped inside text fields; browser build shows the same disabled honesty.
@@ -175,7 +188,16 @@ export function TimelineDock({
       </div>
       <div className="min-h-0 flex-1 overflow-auto rounded-avid-md border border-avid-border-subtle">
         {timeline ? (
-          <TimelineCanvas timeline={timeline} selectedId={selectedId} onSelect={onSelect} zoom={zoom} />
+          <TimelineCanvas
+            timeline={timeline}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            zoom={zoom}
+            playhead={currentTime}
+            onSeek={backend ? (time) => requestSeek(time) : undefined}
+            onMoveClip={backend ? handleMove : undefined}
+            onTrimClip={backend ? handleTrim : undefined}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-4">
             <p className="text-xs text-avid-muted">

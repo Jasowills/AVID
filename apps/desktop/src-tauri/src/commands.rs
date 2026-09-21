@@ -370,6 +370,15 @@ pub fn timeline_split_clip(
 }
 
 #[tauri::command]
+pub fn timeline_move_clip(
+    state: State<'_, crate::AppState>,
+    clip_id: String,
+    start: f64,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.move_clip(&clip_id, start))
+}
+
+#[tauri::command]
 pub fn timeline_trim_clip(
     state: State<'_, crate::AppState>,
     clip_id: String,

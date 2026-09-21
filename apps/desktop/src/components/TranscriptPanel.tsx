@@ -5,6 +5,7 @@ import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { JobEvent, ModelStatus, Transcript } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
+import { usePlaybackStore } from "../stores/usePlaybackStore";
 
 /**
  * Transcript panel (Phase 5 UI slice): transcribe an imported asset through
@@ -22,6 +23,7 @@ export function TranscriptPanel({
   const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const requestSeek = usePlaybackStore((state) => state.requestSeek);
   const [busy, setBusy] = useState(false);
   const [modelBusy, setModelBusy] = useState(false);
   const [modelNote, setModelNote] = useState<string | null>(null);
@@ -135,7 +137,10 @@ export function TranscriptPanel({
           {transcript.segments.map((segment, index) => (
             <button
               key={`${segment.start}-${index}`}
-              onClick={() => setActive(active === index ? null : index)}
+              onClick={() => {
+                setActive(active === index ? null : index);
+                requestSeek(segment.start);
+              }}
               aria-pressed={active === index}
               className={`rounded-avid-sm px-2 py-1 text-left text-sm ${
                 active === index ? "bg-avid-accent-muted text-avid-primary" : "text-avid-secondary hover:bg-avid-raised"

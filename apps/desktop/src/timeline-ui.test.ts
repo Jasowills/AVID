@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@avid/shared-types";
-import { kindFill, layoutTimeline } from "./components/timelineLayout";
+import { formatRulerLabel, kindFill, layoutTimeline, rulerStep, rulerTicks, snapTime } from "./components/timelineLayout";
 
 const TIMELINE: Timeline = {
   tracks: [
@@ -41,5 +41,23 @@ describe("kindFill", () => {
     for (const kind of ["video", "audio", "text", "graphics", "caption", "unknown"]) {
       expect(kindFill(kind)).toMatch(/^#[0-9a-f]{6}$/);
     }
+  });
+});
+
+describe("rulerTicks", () => {
+  it("covers the duration at readable steps", () => {
+    expect(rulerStep(60, 24)).toBe(5);
+    expect(rulerTicks(10, 5)).toEqual([0, 5, 10]);
+    expect(rulerTicks(0, 5)).toEqual([]);
+    expect(formatRulerLabel(65)).toBe("1:05");
+    expect(formatRulerLabel(5)).toBe("0:05");
+  });
+});
+
+describe("snapTime", () => {
+  it("snaps within threshold and leaves distant times alone", () => {
+    expect(snapTime(5.05, [0, 10], 24)).toEqual({ time: 5.05, snapped: false });
+    expect(snapTime(9.9, [0, 10], 24)).toEqual({ time: 10, snapped: true });
+    expect(snapTime(0.1, [10], 24)).toEqual({ time: 0, snapped: true });
   });
 });

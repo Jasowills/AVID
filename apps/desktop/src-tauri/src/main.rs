@@ -103,6 +103,7 @@ fn main() {
             commands::timeline_add_clip,
             commands::timeline_remove_clip,
             commands::timeline_split_clip,
+            commands::timeline_move_clip,
             commands::timeline_trim_clip,
             commands::timeline_set_clip_audio,
             commands::timeline_undo,

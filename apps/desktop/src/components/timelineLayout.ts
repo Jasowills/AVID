@@ -53,6 +53,55 @@ export function layoutTimeline(
   };
 }
 
+/** Nice ruler step for a duration/scale so ticks stay readable. */
+export function rulerStep(duration: number, pxPerSecond: number): number {
+  const targetPx = 90;
+  const raw = targetPx / Math.max(pxPerSecond, 0.001);
+  const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+  const capped = Math.max(duration / 12, raw);
+  return steps.find((step) => step >= capped) ?? 300;
+}
+
+/** Tick times (seconds) covering a duration at a step. Pure — tested. */
+export function rulerTicks(duration: number, step: number): number[] {
+  if (!(duration > 0) || !(step > 0)) return [];
+  const ticks: number[] = [];
+  for (let time = 0; time <= duration + 1e-9; time += step) {
+    ticks.push(Math.round(time * 1000) / 1000);
+  }
+  return ticks;
+}
+
+/** Format ruler labels (m:ss). */
+export function formatRulerLabel(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.floor(seconds % 60);
+  return `${minutes}:${rest.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Snap a dragged time to nearby edges (clip starts/ends, zero) within a
+ * pixel threshold. Returns the snapped time and whether snapping applied.
+ */
+export function snapTime(
+  time: number,
+  edges: number[],
+  pxPerSecond: number,
+  thresholdPx = 8,
+): { time: number; snapped: boolean } {
+  const threshold = thresholdPx / Math.max(pxPerSecond, 0.001);
+  let best = time;
+  let bestDistance = threshold;
+  for (const edge of [0, ...edges]) {
+    const distance = Math.abs(time - edge);
+    if (distance < bestDistance) {
+      best = edge;
+      bestDistance = distance;
+    }
+  }
+  return { time: best, snapped: best !== time };
+}
+
 /** Clip fill per track kind (pairs with the Rust timeline colors). */
 export function kindFill(kind: string): string {
   switch (kind) {

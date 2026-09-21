@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Clip, MediaAsset, Timeline } from "@avid/shared-types";
 import { invokeCommand, isTauri } from "../lib/ipc";
 import { TIMELINE_CHANGED_EVENT } from "../stores/useJobsStore";
+import { usePlaybackStore } from "../stores/usePlaybackStore";
 
 /**
  * Build a `stream://` URL for the backend Range-capable protocol.
@@ -29,7 +30,23 @@ export function PreviewPane({ clipId }: PreviewPaneProps) {
   const [src, setSrc] = useState<string | null>(null);
   const [label, setLabel] = useState<string>("Preview");
   const [notice, setNotice] = useState<string | null>(null);
+  const [time, setTime] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const seekRequest = usePlaybackStore((state) => state.seekRequest);
+  const reportTime = usePlaybackStore((state) => state.reportTime);
   const backend = isTauri();
+
+  // Outward seeks (ruler, transcript): apply to the video element.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && seekRequest && Number.isFinite(seekRequest.time)) {
+      try {
+        video.currentTime = seekRequest.time;
+      } catch {
+        // Not yet seekable (metadata pending) — the next request retries.
+      }
+    }
+  }, [seekRequest]);
 
   useEffect(() => {
     if (!backend) return;
@@ -98,15 +115,21 @@ export function PreviewPane({ clipId }: PreviewPaneProps) {
     <div className="flex w-full max-w-3xl flex-col gap-1">
       <video
         key={src}
+        ref={videoRef}
         src={src}
         controls
         preload="metadata"
         aria-label={`Preview: ${label}`}
+        onTimeUpdate={(event) => {
+          const current = event.currentTarget.currentTime;
+          setTime(current);
+          reportTime(current);
+        }}
         className="aspect-video w-full rounded-avid-lg border border-avid-border bg-black"
       />
       <p className="text-xs text-avid-muted">
         {label}
-        {src.includes("/proxies/") ? " · proxy" : " · original"}
+        {src.includes("/proxies/") ? " · proxy" : " · original"} · {time.toFixed(1)}s
       </p>
     </div>
   );

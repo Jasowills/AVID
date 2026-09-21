@@ -29,6 +29,7 @@ required_files=(
   "apps/desktop/src/components/PreviewPane.tsx" "apps/desktop/src/preview.test.ts"
   "apps/desktop/src/components/VisualsPanel.tsx" "apps/desktop/src-tauri/src/stream.rs"
   "apps/desktop/src/stores/useJobsStore.ts" "apps/desktop/src/ai-jobs.test.ts"
+  "apps/desktop/src/stores/usePlaybackStore.ts"
   "apps/desktop/src-tauri/src/session.rs" "apps/desktop/src-tauri/src/jobs.rs"
   "docs/AI.md" "docs/TIMELINE.md" "docs/RENDERING.md" "docs/PROJECT_FORMAT.md"
   "docs/PROVIDER_SYSTEM.md" "docs/TEMPLATES.md" "docs/TESTING.md" "docs/SECURITY.md"

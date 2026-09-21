@@ -57,7 +57,10 @@
 - [x] Keyboard: S split, Delete remove, Cmd/Ctrl+Z undo, +Shift redo (skipped in text fields); zoom 0.5–4x
 - [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
 - [x] Recovery snapshots (§117): pre-apply snapshot (pruned to 10) + list/restore commands + AiPanel restore button; restore restarts history honestly
-- [ ] Drag/zoom/snapping, markers, shortcuts
+- [x] Playhead + time ruler + click-to-seek (playback bus: video is the clock)
+- [x] Drag-move + drag-trim with edge snapping (snap indicator), `timeline_move_clip` command
+- [x] Transcript click-to-seek; preview shows live time
+- [ ] Markers, cross-track drag, slip/slide modes
 
 ## Phase 4 — Rendering & Export ✅ (render + export real, preview pending)
 
@@ -161,4 +164,5 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
 | 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |
 | 2026-09-20 | Autopilot pass 2 (pending push) | In-app whisper-rs binding + REAL in-process transcription test · `save_project` command + disk round-trip tests · Media probe panel + AI plan-check panel (10 desktop tests) · `tauri dev` full cycle (Vite + backend 19.68 s, binary resident error-free; pixel check needs console session) · `tauri:dev` script wired. |
+| 2026-09-21 | Playback pass | Playhead + ruler + seek bus, drag-move/trim with snapping, move command, transcript seek, live time in preview. |
 | 2026-09-21 | Fix-all pass | Clip volume/mute (engine validation, render gain, audio command, inspector UI) · diagrams v1 (Mermaid import, SVG renderer, visuals store, place-on-timeline, panel) · transcript segment delete · shortcuts + zoom · Home provider hint · thumbnails (command + panel) · `AVID.app` packaged (15 MB) + launched resident (signing/GUI-pixel = wake-up jobs). |
