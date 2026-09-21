@@ -1,18 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { describeEditOperation } from "./components/AiPanel";
+import { describeEditOperation, formatTimecode } from "./components/AiPanel";
 import { runningCount } from "./stores/useJobsStore";
 import type { JobRecord } from "@avid/shared-types";
 
 describe("describeEditOperation", () => {
   it("renders every operation kind as a review line", () => {
     expect(describeEditOperation({ type: "remove_range", start: 10, end: 15, reason: "silence" })).toBe(
-      "REMOVE 10s → 15s — silence",
+      "REMOVE 00:10.0 → 00:15.0 — silence",
     );
     expect(
       describeEditOperation({ type: "add_visual", visualType: "diagram", start: 1, duration: 2, concept: "x" }),
     ).toContain("VISUAL diagram");
     expect(describeEditOperation({ type: "add_caption", start: 1, end: 2, text: "Hi" })).toContain("CAPTION");
-    expect(describeEditOperation({ type: "split_clip", clipId: "a", at: 3 })).toBe("SPLIT a @ 3s");
+    expect(describeEditOperation({ type: "split_clip", clipId: "a", at: 3 })).toBe("SPLIT a @ 00:03.0");
+  });
+});
+
+describe("formatTimecode", () => {
+  it("renders mm:ss.d timecodes for review rows", () => {
+    expect(formatTimecode(0)).toBe("00:00.0");
+    expect(formatTimecode(12.4)).toBe("00:12.4");
+    expect(formatTimecode(72.44)).toBe("01:12.4");
+    expect(formatTimecode(-3)).toBe("00:00.0");
   });
 });
 

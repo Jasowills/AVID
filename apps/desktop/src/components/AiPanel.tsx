@@ -2,30 +2,46 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Channel } from "@tauri-apps/api/core";
 import { validateEditPlan, type EditOperation } from "@avid/ai-protocol";
-import type { ApplyReport, JobEvent, RoughCutProposal } from "@avid/shared-types";
+import type { ApplyReport, CutConfidence, JobEvent, RoughCutProposal } from "@avid/shared-types";
 import { Button, Panel } from "@avid/ui";
 import { invokeCommand, IpcError } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
 import { toastSuccess } from "../stores/useToastStore";
 
+/** Format seconds as mm:ss.d timecode for review rows. Pure — tested. */
+export function formatTimecode(totalSeconds: number): string {
+  const clamped = Math.max(0, totalSeconds);
+  const minutes = Math.floor(clamped / 60);
+  const seconds = clamped - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${seconds.toFixed(1).padStart(4, "0")}`;
+}
+
 /** Human line per operation for review checkboxes and reports. Pure — tested. */
 export function describeEditOperation(op: EditOperation): string {
   switch (op.type) {
     case "remove_range":
-      return `REMOVE ${op.start}s → ${op.end}s — ${op.reason}`;
+      return `REMOVE ${formatTimecode(op.start)} → ${formatTimecode(op.end)} — ${op.reason}`;
     case "add_visual":
-      return `VISUAL ${op.visualType} @ ${op.start}s for ${op.duration}s — ${op.concept}`;
+      return `VISUAL ${op.visualType} @ ${formatTimecode(op.start)} for ${op.duration}s — ${op.concept}`;
     case "add_caption":
-      return `CAPTION ${op.start}s → ${op.end}s — ${op.text}`;
+      return `CAPTION ${formatTimecode(op.start)} → ${formatTimecode(op.end)} — ${op.text}`;
     case "split_clip":
-      return `SPLIT ${op.clipId} @ ${op.at}s`;
+      return `SPLIT ${op.clipId} @ ${formatTimecode(op.at)}`;
   }
 }
+
+/** Sources the rough-cut proposer can actually inspect (mirrors backend `analyzed`). */
+const ANALYZED_SOURCES = [
+  { key: "transcript", label: "Transcript" },
+  { key: "silence", label: "Timeline audio" },
+  { key: "visual", label: "Visuals" },
+  { key: "assets", label: "Assets" },
+] as const;
 
 /** Operation types the backend executes today (visuals land in Phase 8). */
 const SENDABLE_TYPES = new Set(["remove_range", "add_caption", "split_clip"]);
 
-type ReviewOp = { op: EditOperation; accepted: boolean };
+type ReviewOp = { op: EditOperation; accepted: boolean; confidence?: CutConfidence };
 
 /**
  * AI panel (Phase 7 slice): edit-plan dry-run validator + diff/apply.
@@ -53,6 +69,8 @@ export function AiPanel() {
   const [includeFillers, setIncludeFillers] = useState(true);
   const [proposing, setProposing] = useState(false);
   const [proposalNote, setProposalNote] = useState<string | null>(null);
+  /** Backend `analyzed` split into source keys — null until a proposal (or pasted plan) exists. */
+  const [analyzedBy, setAnalyzedBy] = useState<string[] | null>(null);
 
   function onValidate(event: FormEvent): void {
     event.preventDefault();
@@ -65,6 +83,8 @@ export function AiPanel() {
     if (result.ok && result.plan) {
       setGoal(result.plan.goal);
       setReview(result.plan.operations.map((op) => ({ op, accepted: true })));
+      // Pasted plan: AVID analyzed nothing — the review rows stand on their own.
+      setAnalyzedBy([]);
       setErrors([]);
     } else {
       setReview(null);
@@ -95,8 +115,10 @@ export function AiPanel() {
         proposal.cuts.map((cut) => ({
           op: { type: "remove_range", start: cut.start, end: cut.end, reason: cut.reason } as EditOperation,
           accepted: true,
+          confidence: cut.confidence,
         })),
       );
+      setAnalyzedBy(proposal.analyzed.split("+").filter(Boolean));
       setErrors([]);
       setProposalNote(
         `${proposal.cuts.length} cuts proposed, ${proposal.removable_seconds.toFixed(1)}s removable (${proposal.analyzed}). Review below — nothing applied yet.`,
@@ -193,6 +215,25 @@ export function AiPanel() {
           </Button>
         </div>
         {proposalNote && <p className="text-xs text-avid-muted">{proposalNote}</p>}
+        {analyzedBy && (
+          <div className="rounded-avid-md border border-avid-border-subtle bg-avid-raised px-3 py-2">
+            <p className="text-xs font-medium text-avid-secondary">Analyzed for this proposal</p>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {ANALYZED_SOURCES.map((source) => {
+                const covered = analyzedBy.includes(source.key);
+                return (
+                  <li key={source.key} className="flex items-center gap-2 text-xs">
+                    <span aria-hidden className={covered ? "text-avid-success" : "text-avid-faint"}>
+                      {covered ? "✓" : "—"}
+                    </span>
+                    <span className="text-avid-primary">{source.label}</span>
+                    <span className="text-avid-faint">{covered ? "checked" : "not covered"}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </form>
 
       <form onSubmit={onValidate} className="mt-4 flex flex-col gap-3">
@@ -242,6 +283,7 @@ export function AiPanel() {
             {review.map((item, index) => (
               <li key={`${describeEditOperation(item.op)}-${index}`}>
                 <label className="flex cursor-pointer items-start gap-2 rounded-avid-sm bg-avid-raised px-2 py-1">
+                  <span className="mt-0.5 w-6 shrink-0 text-right font-mono text-xs text-avid-faint">{index + 1}.</span>
                   <input
                     type="checkbox"
                     checked={item.accepted}
@@ -251,7 +293,14 @@ export function AiPanel() {
                     aria-label={`Accept: ${describeEditOperation(item.op)}`}
                     className="mt-1 accent-avid-accent"
                   />
-                  <span className="font-mono text-xs text-avid-primary">{describeEditOperation(item.op)}</span>
+                  <span className="font-mono text-xs text-avid-primary">
+                    {describeEditOperation(item.op)}
+                    {item.confidence && (
+                      <span className="ml-2 text-avid-faint">
+                        · {item.confidence === "high" ? "High" : "Medium"} confidence
+                      </span>
+                    )}
+                  </span>
                 </label>
               </li>
             ))}
