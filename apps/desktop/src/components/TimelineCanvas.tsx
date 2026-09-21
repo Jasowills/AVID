@@ -7,6 +7,7 @@ import {
   formatRulerLabel,
   kindFill,
   layoutTimeline,
+  peaksToPath,
   rulerStep,
   rulerTicks,
   snapTime,
@@ -28,6 +29,8 @@ export interface TimelineCanvasProps {
   onTrimClip?: (clipId: string, start: number, duration: number) => void;
   /** Track lock toggle. Absent hides lock buttons. */
   onToggleLock?: (trackId: string, locked: boolean) => void;
+  /** Waveform peaks keyed by clip source_media_id. Absent clips render flat. */
+  peaksByMedia?: Record<string, number[]>;
 }
 
 interface DragState {
@@ -59,6 +62,7 @@ export function TimelineCanvas({
   onMoveClip,
   onTrimClip,
   onToggleLock,
+  peaksByMedia,
 }: TimelineCanvasProps) {
   const scale = PX_PER_SECOND * zoom;
   const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId, zoom);
@@ -312,6 +316,23 @@ export function TimelineCanvas({
             strokeWidth={drag?.id === rect.id || rect.selected ? 2 : 0}
             strokeDasharray={drag?.snapped && drag.id === rect.id ? "4,2" : undefined}
           />
+          {rect.width > 40 &&
+            peaksByMedia?.[rect.sourceMediaId]?.length ? (
+            <path
+              d={peaksToPath(
+                peaksByMedia[rect.sourceMediaId] as number[],
+                rect.x + 3,
+                28 + rect.lane * LANE_HEIGHT + 8,
+                Math.max(rect.width - 6, 1),
+                LANE_HEIGHT - 16,
+              )}
+              fill="none"
+              stroke="#4ade80"
+              strokeWidth={1}
+              opacity={0.85}
+              pointerEvents="none"
+            />
+          ) : null}
           {rect.width > 40 && (
             <text x={rect.x + 6} y={28 + rect.lane * LANE_HEIGHT + 25} fill="#e8eaed" fontSize={11}>
               {rect.name}

@@ -48,7 +48,7 @@
 - [x] Media library: grid/list toggle, search (name+id), auto-thumbnails with duration badges + audio glyphs, retry per item
 - [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
-## Phase 3 — Timeline ✅ (engine + working UI; drag/snapping/markers pending)
+## Phase 3 — Timeline ✅ (engine + working UI; markers/slip pending)
 
 - [x] Model: tracks/clips with all §13 fields, overlap validation, locked tracks
 - [x] Commands: Add/Remove/Trim/Move/Split with execute/undo/redo/serialize (18 tests, clippy pedantic, fmt)
@@ -60,6 +60,7 @@
 - [x] Playhead + time ruler + click-to-seek (playback bus: video is the clock)
 - [x] Drag-move + drag-trim with edge snapping (snap indicator), `timeline_move_clip` command
 - [x] Transcript click-to-seek; preview shows live time
+- [x] Waveforms in timeline: peaks engine (decode + downsample, live tone/silence test) + session cache + `waveform_peaks` command + SVG rendering in audio clips
 - [ ] Markers, cross-track drag, slip/slide modes
 
 ## Phase 4 — Rendering & Export ✅ (render + export real, preview pending)
@@ -164,6 +165,7 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
 | 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |
 | 2026-09-20 | Autopilot pass 2 (pending push) | In-app whisper-rs binding + REAL in-process transcription test · `save_project` command + disk round-trip tests · Media probe panel + AI plan-check panel (10 desktop tests) · `tauri dev` full cycle (Vite + backend 19.68 s, binary resident error-free; pixel check needs console session) · `tauri:dev` script wired. |
+| 2026-09-21 | Waveform pass | Peaks pipeline (engine + session cache + command + canvas rendering); 24 desktop tests. |
 | 2026-09-21 | Library pass | Grid/list library with search, lazy thumbnails, duration badges; filter helpers tested. |
 | 2026-09-21 | Diffusion-UI pass | lucide-react icons (Icon wrapper, all glyphs replaced) · track lock command + gutter toggles · transport play/pause · inspector sections · adoption plan `docs/diffusion-ui-adoption.md`. |
 | 2026-09-21 | Playback pass | Playhead + ruler + seek bus, drag-move/trim with snapping, move command, transcript seek, live time in preview. |

@@ -181,6 +181,27 @@ fn check_input_path(path: &Path) -> Result<(), MediaError> {
     Ok(())
 }
 
+/// Downsample samples to per-bucket peak amplitudes (0–1). Empty input
+/// yields silence (zeros), never an error — the UI draws flat lines.
+pub fn compute_peaks(samples: &[f32], buckets: usize) -> Vec<f32> {
+    if buckets == 0 || samples.is_empty() {
+        return vec![0.0; buckets];
+    }
+    let per_bucket = (samples.len() as f64 / buckets as f64).ceil().max(1.0) as usize;
+    samples
+        .chunks(per_bucket)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .map(|sample| sample.abs())
+                .fold(0.0, f32::max)
+                .min(1.0)
+        })
+        .chain(std::iter::repeat(0.0))
+        .take(buckets)
+        .collect()
+}
+
 /// Parse `-progress pipe:1` key=value output into `(out_time_us, speed)`.
 /// Returns `None` for non-progress lines (headers, blank lines).
 pub fn parse_progress_line(line: &str) -> Option<(u64, String)> {
@@ -584,6 +605,74 @@ impl MediaEngine {
         self.run_ffmpeg("extractAudio", &self.extract_audio_command(input, output))
     }
 
+    /// Decode audio to mono f32 samples for analysis (fixed 8 kHz keeps
+    /// memory bounded: ~10 min of audio is <20 MB). Paths explicit.
+    pub fn decode_audio_mono(
+        &self,
+        input: &Path,
+        sample_rate: u32,
+    ) -> Result<Vec<f32>, MediaError> {
+        let argv = vec![
+            self.ffmpeg.display().to_string(),
+            "-v".to_owned(),
+            "error".to_owned(),
+            "-i".to_owned(),
+            input.display().to_string(),
+            "-map".to_owned(),
+            "0:a".to_owned(),
+            "-ac".to_owned(),
+            "1".to_owned(),
+            "-ar".to_owned(),
+            sample_rate.to_string(),
+            "-f".to_owned(),
+            "f32le".to_owned(),
+            "-".to_owned(),
+        ];
+        let (binary, args) = argv
+            .split_first()
+            .ok_or_else(|| MediaError::ProcessFailed {
+                op: "waveform",
+                exit: "empty".to_owned(),
+                stderr: String::new(),
+            })?;
+        let output = std::process::Command::new(binary)
+            .args(args)
+            .output()
+            .map_err(|e| MediaError::BinaryUnavailable(e.to_string()))?;
+        if !output.status.success() {
+            return Err(MediaError::ProcessFailed {
+                op: "waveform",
+                exit: output
+                    .status
+                    .code()
+                    .map_or("signal".to_owned(), |c| c.to_string()),
+                stderr: truncate(&String::from_utf8_lossy(&output.stderr)),
+            });
+        }
+        let (chunks, _remainder) = output.stdout.as_chunks::<4>();
+        Ok(chunks
+            .iter()
+            .map(|chunk| f32::from_le_bytes(*chunk))
+            .filter(|sample| sample.is_finite())
+            .collect())
+    }
+
+    /// Peak amplitudes (0–1) for waveform display, `buckets` wide.
+    /// Pure over samples — unit-tested with synthetic tones.
+    pub fn waveform_peaks(&self, input: &Path, buckets: usize) -> Result<Vec<f32>, MediaError> {
+        if buckets == 0 || buckets > 4096 {
+            return Err(MediaError::ProcessFailed {
+                op: "waveform",
+                exit: "params".to_owned(),
+                stderr: "buckets must be 1–4096".to_owned(),
+            });
+        }
+        Ok(compute_peaks(
+            &self.decode_audio_mono(input, 8000)?,
+            buckets,
+        ))
+    }
+
     /// Run single-frame extraction (thumbnails, storyboards).
     pub fn extract_frame(
         &self,
@@ -738,6 +827,57 @@ mod tests {
         let spans = engine.detect_silence(staged, -30.0, 0.5).unwrap();
         std::fs::remove_file(staged).ok();
         assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn peaks_follow_a_sine_envelope() {
+        // 440 Hz-ish sine at 8 kHz, amplitude ramping 0→1 across the buffer.
+        let samples: Vec<f32> = (0..8000)
+            .map(|i| {
+                let envelope = i as f32 / 8000.0;
+                (i as f32 * 0.34).sin() * envelope
+            })
+            .collect();
+        let peaks = compute_peaks(&samples, 8);
+        assert_eq!(peaks.len(), 8);
+        assert!(peaks[0] < 0.2, "ramp starts quiet: {}", peaks[0]);
+        assert!(peaks[7] > 0.9, "ramp ends loud: {}", peaks[7]);
+        for window in peaks.windows(2) {
+            assert!(window[0] <= window[1] + 0.15, "monotonic ramp: {window:?}");
+        }
+        assert_eq!(compute_peaks(&[], 4), vec![0.0; 4]);
+        assert_eq!(compute_peaks(&samples, 0), vec![0.0; 0]);
+    }
+
+    /// LIVE: real decode + peaks on the tone fixture (loud throughout) and
+    /// the silence fixture (near-zero). Ignored without fixtures.
+    #[test]
+    #[ignore]
+    fn live_waveform_peaks_match_content() {
+        let engine = MediaEngine::system().expect("system ffmpeg/ffprobe");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/media");
+        if !dir.join("talkinghead_10s.mp4").is_file() {
+            return;
+        }
+        for name in ["talkinghead_10s.mp4", "silence_5s.mp4"] {
+            std::fs::copy(dir.join(name), Path::new(name)).unwrap();
+        }
+        let tone = engine
+            .waveform_peaks(Path::new("talkinghead_10s.mp4"), 64)
+            .unwrap();
+        let silence = engine
+            .waveform_peaks(Path::new("silence_5s.mp4"), 64)
+            .unwrap();
+        std::fs::remove_file("talkinghead_10s.mp4").ok();
+        std::fs::remove_file("silence_5s.mp4").ok();
+        assert_eq!((tone.len(), silence.len()), (64, 64));
+        let tone_mean: f32 = tone.iter().sum::<f32>() / tone.len() as f32;
+        let silence_max = silence.iter().cloned().fold(0.0, f32::max);
+        assert!(silence_max < 0.05, "silence must read quiet: {silence_max}");
+        assert!(
+            tone_mean > (silence_max * 5.0).max(0.05),
+            "tone ({tone_mean}) must clearly exceed silence ({silence_max})"
+        );
     }
 
     #[test]

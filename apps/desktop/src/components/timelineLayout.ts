@@ -10,6 +10,7 @@ export const GUTTER_WIDTH = 64;
 export interface ClipRect {
   id: string;
   name: string;
+  sourceMediaId: string;
   x: number;
   width: number;
   lane: number;
@@ -38,6 +39,7 @@ export function layoutTimeline(
     return {
       id: clip.id,
       name: clip.name,
+      sourceMediaId: clip.source_media_id,
       x: GUTTER_WIDTH + clip.start * scale,
       width: Math.max(4, clip.duration * scale),
       lane,
@@ -100,6 +102,33 @@ export function snapTime(
     }
   }
   return { time: best, snapped: best !== time };
+}
+
+/** Waveform polyline path for peaks inside a rect (mirrored around mid).
+ * Pure — tested. Empty peaks render a flat midline (never nothing). */
+export function peaksToPath(
+  peaks: number[],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): string {
+  const mid = y + height / 2;
+  const amp = height / 2 - 1;
+  if (peaks.length === 0 || width <= 0) {
+    return `M ${x} ${mid} L ${x + Math.max(width, 0)} ${mid}`;
+  }
+  const n = peaks.length;
+  const top: string[] = [];
+  const bottom: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const px = x + (width * i) / Math.max(n - 1, 1);
+    const peak = Math.min(Math.max(peaks[i] ?? 0, 0), 1);
+    top.push(`L ${px.toFixed(1)} ${(mid - peak * amp).toFixed(1)}`);
+    bottom.push(`L ${px.toFixed(1)} ${(mid + peak * amp).toFixed(1)}`);
+  }
+  top[0] = top[0]?.replace(/^L/, "M") ?? `M ${x} ${mid}`;
+  return `${top.join(" ")} ${bottom.reverse().join(" ")} Z`;
 }
 
 /** Clip fill per track kind (pairs with the Rust timeline colors). */

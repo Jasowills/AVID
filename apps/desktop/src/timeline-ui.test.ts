@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@avid/shared-types";
-import { formatRulerLabel, kindFill, layoutTimeline, rulerStep, rulerTicks, snapTime } from "./components/timelineLayout";
+import { formatRulerLabel, kindFill, layoutTimeline, peaksToPath, rulerStep, rulerTicks, snapTime } from "./components/timelineLayout";
 
 const TIMELINE: Timeline = {
   tracks: [
@@ -59,5 +59,20 @@ describe("snapTime", () => {
     expect(snapTime(5.05, [0, 10], 24)).toEqual({ time: 5.05, snapped: false });
     expect(snapTime(9.9, [0, 10], 24)).toEqual({ time: 10, snapped: true });
     expect(snapTime(0.1, [10], 24)).toEqual({ time: 0, snapped: true });
+  });
+});
+
+describe("peaksToPath", () => {
+  it("draws a mirrored polygon scaled to the rect", () => {
+    const path = peaksToPath([0, 0.5, 1], 10, 20, 100, 30);
+    expect(path.startsWith("M 10")).toBe(true);
+    expect(path.endsWith("Z")).toBe(true);
+    // Peak 1.0 reaches near the top edge (mid 35, amp 14).
+    expect(path).toContain("21.0");
+  });
+
+  it("renders silence as a flat midline and never empties", () => {
+    expect(peaksToPath([], 10, 20, 100, 30)).toBe("M 10 35 L 110 35");
+    expect(peaksToPath([0, 0], 10, 20, 100, 30)).toContain("35.0");
   });
 });

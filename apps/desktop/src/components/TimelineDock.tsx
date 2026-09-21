@@ -24,29 +24,59 @@ export function TimelineDock({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [peaksByMedia, setPeaksByMedia] = useState<Record<string, number[]>>({});
   const currentTime = usePlaybackStore((state) => state.currentTime);
   const requestSeek = usePlaybackStore((state) => state.requestSeek);
   const backend = isTauri();
 
-  const refresh = useCallback(async () => {
+  // Waveforms for every unique media id with audio. Best-effort per
+  // source: failures (video-only files) simply leave that clip flat.
+  const refreshPeaks = useCallback(async (timeline: Timeline) => {
+    const ids = [...new Set(Object.values(timeline.clips).map((clip) => clip.source_media_id))];
+    const entries = await Promise.all(
+      ids.map(async (sourceId) => {
+        try {
+          const peaks = await invokeCommand<number[]>("waveform_peaks", {
+            assetId: sourceId,
+            buckets: 160,
+          });
+          return [sourceId, peaks] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const next: Record<string, number[]> = {};
+    for (const entry of entries) {
+      if (entry) next[entry[0]] = entry[1];
+    }
+    setPeaksByMedia(next);
+  }, []);
+
+  const refreshAll = useCallback(async () => {
     try {
-      setTimeline(await invokeCommand<Timeline>("timeline_get"));
+      const timeline = await invokeCommand<Timeline>("timeline_get");
+      setTimeline(timeline);
       setNotice(null);
+      await refreshPeaks(timeline);
     } catch (e) {
       setTimeline(null);
       setNotice(e instanceof IpcError ? e.message : "Timeline unavailable.");
     }
-  }, []);
+  }, [refreshPeaks]);
 
   useEffect(() => {
     onSelect(null);
-    refresh();
-  }, [refresh, projectId]);
+    void refreshAll();
+  }, [refreshAll, projectId]);
 
   useEffect(() => {
-    window.addEventListener(TIMELINE_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(TIMELINE_CHANGED_EVENT, refresh);
-  }, [refresh]);
+    const reload = (): void => {
+      void refreshAll();
+    };
+    window.addEventListener(TIMELINE_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(TIMELINE_CHANGED_EVENT, reload);
+  }, [refreshAll]);
 
   const selected: Clip | null =
     selectedId && timeline ? (timeline.clips[selectedId] ?? null) : null;
@@ -118,7 +148,7 @@ export function TimelineDock({
         setNotice(null);
       }
       onSelect(null);
-      await refresh();
+      await refreshAll();
     } catch (e) {
       setNotice(e instanceof IpcError ? e.message : `${label} failed unexpectedly.`);
     } finally {
@@ -198,6 +228,7 @@ export function TimelineDock({
             timeline={timeline}
             selectedId={selectedId}
             onSelect={onSelect}
+            peaksByMedia={peaksByMedia}
             zoom={zoom}
             playhead={currentTime}
             onSeek={backend ? (time) => requestSeek(time) : undefined}

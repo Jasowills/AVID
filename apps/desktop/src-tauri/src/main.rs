@@ -86,6 +86,7 @@ fn main() {
             commands::list_assets,
             commands::generate_proxy,
             commands::thumbnail_asset,
+            commands::waveform_peaks,
             commands::transcribe_media,
             commands::probe_media,
             commands::speech_model_status,

@@ -938,6 +938,18 @@ pub fn thumbnail_asset(
     })
 }
 
+/// Waveform peaks for an asset (0–1 floats, memoized per session).
+/// Powers timeline audio rendering; fails closed for audio-less assets.
+#[tauri::command]
+pub fn waveform_peaks(
+    state: State<'_, crate::AppState>,
+    asset_id: String,
+    buckets: usize,
+) -> Result<Vec<f32>, CommandError> {
+    let engine = MediaEngine::system().map_err(CommandError::from)?;
+    state.with_session(|session| session.waveform_peaks(&engine, &asset_id, buckets))
+}
+
 /// List imported assets for the media library UI.
 #[tauri::command]
 pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>, CommandError> {

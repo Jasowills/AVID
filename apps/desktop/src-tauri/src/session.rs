@@ -27,6 +27,9 @@ pub struct Session {
     manifest: ProjectManifest,
     timeline: Timeline,
     undo: UndoStack,
+    /// Waveform peaks per asset id. Regenerable cache: never persisted,
+    /// never part of undo — recomputed on demand, dropped on reload.
+    peaks: std::collections::HashMap<String, Vec<f32>>,
 }
 
 impl Session {
@@ -85,6 +88,7 @@ impl Session {
             manifest,
             timeline,
             undo: UndoStack::default(),
+            peaks: std::collections::HashMap::new(),
         };
         session.persist()?;
         Ok(session)
@@ -107,6 +111,7 @@ impl Session {
             manifest,
             timeline,
             undo: UndoStack::default(),
+            peaks: std::collections::HashMap::new(),
         })
     }
 
@@ -759,6 +764,50 @@ impl Session {
         )
     }
 
+    /// Waveform peaks for an asset (0–1, `buckets` wide), memoized per
+    /// session. Only audio-bearing assets qualify; anything else fails
+    /// closed with guidance instead of decoding video silently.
+    pub fn waveform_peaks(
+        &mut self,
+        engine: &MediaEngine,
+        asset_id: &str,
+        buckets: usize,
+    ) -> Result<Vec<f32>, CommandError> {
+        if buckets == 0 || buckets > 4096 {
+            return Err(CommandError {
+                code: "AVID_MEDIA_003".to_owned(),
+                message: "Peak buckets must be 1–4096.".to_owned(),
+            });
+        }
+        if let Some(cached) = self.peaks.get(asset_id) {
+            return Ok(cached.clone());
+        }
+        let asset = self
+            .manifest
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "Unknown media asset.".to_owned(),
+            })?;
+        let info = engine
+            .probe_file(&self.dir.join(&asset.relative_path))
+            .map_err(|error| crate::commands::command_error_from_media(&error))?;
+        if info.audio_stream().is_none() {
+            return Err(CommandError {
+                code: "AVID_MEDIA_001".to_owned(),
+                message: "That asset has no audio to draw.".to_owned(),
+            });
+        }
+        let peaks = engine
+            .waveform_peaks(&self.dir.join(&asset.relative_path), buckets)
+            .map_err(|error| crate::commands::command_error_from_media(&error))?;
+        self.peaks.insert(asset_id.to_owned(), peaks.clone());
+        Ok(peaks)
+    }
+
     /// Stored transcript for an asset, if transcribed.
     #[must_use]
     pub fn transcript_for(&self, asset_id: &str) -> Option<Transcript> {
@@ -991,6 +1040,20 @@ mod tests {
         let loaded = Session::load(dir.clone()).unwrap();
         assert_eq!(loaded.timeline(), session.timeline());
         assert_eq!(loaded.manifest().id, "s1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn waveform_rejects_bad_requests_without_decoding() {
+        let Ok(engine) = MediaEngine::system() else {
+            return;
+        };
+        let dir = std::env::temp_dir().join("avid-waveform-invalid");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("wv")).unwrap();
+        assert!(session.waveform_peaks(&engine, "nope", 64).is_err());
+        assert!(session.waveform_peaks(&engine, "nope", 0).is_err());
+        assert!(session.waveform_peaks(&engine, "nope", 99999).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }
 
