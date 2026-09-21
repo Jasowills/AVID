@@ -318,6 +318,21 @@ impl Session {
         )
     }
 
+    /// Set a clip's gain/mute (undoable, persisted). Gain 0–4, 1 = unity.
+    pub fn set_clip_audio(
+        &mut self,
+        clip_id: &str,
+        volume: f32,
+        muted: bool,
+    ) -> Result<(), CommandError> {
+        self.mutate(
+            "Set clip audio",
+            Box::new(avid_timeline::SetClipAudioCommand::new(
+                clip_id, volume, muted,
+            )),
+        )
+    }
+
     /// Undo the last step and persist.
     pub fn undo(&mut self) -> Result<String, CommandError> {
         let label = self
@@ -402,6 +417,8 @@ impl Session {
                     start: 0.0,
                     duration,
                     in_point: 0.0,
+                    volume: 1.0,
+                    muted: false,
                     name: file_name.to_owned(),
                 };
                 self.mutate("Import media", Box::new(AddClipCommand { clip }))?;
@@ -767,6 +784,8 @@ mod tests {
             start,
             duration,
             in_point: 0.0,
+            volume: 1.0,
+            muted: false,
             name: id.to_owned(),
         }
     }
@@ -843,6 +862,32 @@ mod tests {
             std::fs::metadata(&proxy_file).unwrap().len()
                 < std::fs::metadata(&fixture).unwrap().len()
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn clip_audio_round_trips_and_persists() {
+        let dir = std::env::temp_dir().join("avid-audio-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("au")).unwrap();
+        session.add_clip(clip("a", 0.0, 8.0)).unwrap();
+        session.set_clip_audio("a", 0.25, true).unwrap();
+        assert_eq!(
+            (
+                session.timeline().clips["a"].volume,
+                session.timeline().clips["a"].muted
+            ),
+            (0.25, true)
+        );
+        session.undo().unwrap();
+        assert_eq!(
+            (
+                session.timeline().clips["a"].volume,
+                session.timeline().clips["a"].muted
+            ),
+            (1.0, false)
+        );
+        assert!(session.set_clip_audio("missing", 1.0, false).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1003,6 +1048,8 @@ mod tests {
                 start: 1.0,
                 duration: 2.0,
                 in_point: 0.0,
+                volume: 1.0,
+                muted: false,
                 name: "Hello captions".to_owned(),
             })
             .unwrap();

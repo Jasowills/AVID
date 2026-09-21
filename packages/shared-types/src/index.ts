@@ -99,6 +99,9 @@ export interface Clip {
   start: number;
   duration: number;
   in_point: number;
+  /** Gain 0–4 (1 = unity). Older projects load as 1. */
+  volume: number;
+  muted: boolean;
   name: string;
 }
 

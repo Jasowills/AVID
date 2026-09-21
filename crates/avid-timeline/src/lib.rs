@@ -14,7 +14,7 @@ pub mod undo;
 
 pub use commands::{
     AddClipCommand, EditCommand, MoveClipCommand, RemoveClipCommand, RemoveRangeCommand,
-    SplitClipCommand, TrimClipCommand,
+    SetClipAudioCommand, SplitClipCommand, TrimClipCommand,
 };
 pub use error::TimelineError;
 pub use model::{Clip, Seconds, Timeline, Track, TrackKind};

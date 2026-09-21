@@ -55,7 +55,18 @@ pub struct Clip {
     pub duration: Seconds,
     /// Offset into the source media, in seconds.
     pub in_point: Seconds,
+    /// Clip volume (0 = silent, 1 = unity). Default 1.0 for new clips;
+    /// older manifests load as 1.0 via `default`.
+    #[serde(default = "default_volume")]
+    pub volume: f32,
+    /// Muted overrides volume (mixed to silence without losing the gain).
+    #[serde(default)]
+    pub muted: bool,
     pub name: String,
+}
+
+fn default_volume() -> f32 {
+    1.0
 }
 
 impl Clip {
@@ -153,6 +164,12 @@ impl Timeline {
         valid_time(clip.start, "start")?;
         valid_duration(clip.duration)?;
         valid_time(clip.in_point, "in_point")?;
+        if !clip.volume.is_finite() || !(0.0..=4.0).contains(&clip.volume) {
+            return Err(TimelineError::InvalidTime(format!(
+                "volume = {} (must be 0..4)",
+                clip.volume
+            )));
+        }
         if ignore_id != Some(clip.id.as_str()) && self.clips.contains_key(&clip.id) {
             return Err(TimelineError::DuplicateClipId(clip.id.clone()));
         }
@@ -203,6 +220,8 @@ mod tests {
             start,
             duration,
             in_point: 0.0,
+            volume: 1.0,
+            muted: false,
             name: id.to_owned(),
         }
     }
@@ -267,6 +286,30 @@ mod tests {
         let json = serde_json::to_string(&tl).unwrap();
         let back: Timeline = serde_json::from_str(&json).unwrap();
         assert_eq!(tl, back);
+    }
+
+    #[test]
+    fn volume_defaults_and_old_clips_parse() {
+        // Pre-volume manifests (no volume/muted keys) load as unity/unmuted.
+        let old = serde_json::json!({
+            "id": "old",
+            "source_media_id": "m",
+            "track_id": "v1",
+            "start": 0.0,
+            "duration": 2.0,
+            "in_point": 0.0,
+            "name": "old"
+        });
+        let parsed: Clip = serde_json::from_value(old).unwrap();
+        assert_eq!((parsed.volume, parsed.muted), (1.0, false));
+
+        let mut tl = timeline();
+        let mut bad = clip("bad", 0.0, 2.0);
+        bad.volume = 99.0;
+        assert!(matches!(
+            tl.insert_clip(bad).unwrap_err(),
+            TimelineError::InvalidTime(_)
+        ));
     }
 
     #[test]

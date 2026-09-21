@@ -408,6 +408,68 @@ impl EditCommand for SplitClipCommand {
     }
 }
 
+/// Change a clip's gain and mute state (AGENTS §66 minimum: volume + mute).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SetClipAudioCommand {
+    /// Id of the clip to adjust.
+    pub clip_id: String,
+    /// New gain, 0–4 (1 = unity).
+    pub volume: f32,
+    /// New mute state.
+    pub muted: bool,
+    #[serde(skip)]
+    previous: Option<(f32, bool)>,
+}
+
+impl SetClipAudioCommand {
+    /// Create a gain/mute change.
+    #[must_use]
+    pub fn new(clip_id: impl Into<String>, volume: f32, muted: bool) -> Self {
+        Self {
+            clip_id: clip_id.into(),
+            volume,
+            muted,
+            previous: None,
+        }
+    }
+}
+
+impl EditCommand for SetClipAudioCommand {
+    fn name(&self) -> &'static str {
+        "Set clip audio"
+    }
+
+    fn execute(&mut self, timeline: &mut Timeline) -> Result<(), TimelineError> {
+        let mut candidate = timeline
+            .clips
+            .get(&self.clip_id)
+            .cloned()
+            .ok_or_else(|| TimelineError::ClipNotFound(self.clip_id.clone()))?;
+        self.previous = Some((candidate.volume, candidate.muted));
+        candidate.volume = self.volume;
+        candidate.muted = self.muted;
+        timeline.validate_clip(&candidate, Some(&candidate.id))?;
+        timeline.clips.insert(candidate.id.clone(), candidate);
+        Ok(())
+    }
+
+    fn undo(&mut self, timeline: &mut Timeline) -> Result<(), TimelineError> {
+        let (volume, muted) = self
+            .previous
+            .ok_or_else(|| TimelineError::NotExecuted(self.name().to_owned()))?;
+        let mut candidate = timeline
+            .clips
+            .get(&self.clip_id)
+            .cloned()
+            .ok_or_else(|| TimelineError::ClipNotFound(self.clip_id.clone()))?;
+        candidate.volume = volume;
+        candidate.muted = muted;
+        timeline.validate_clip(&candidate, Some(&candidate.id))?;
+        timeline.clips.insert(candidate.id.clone(), candidate);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +504,8 @@ mod tests {
             start,
             duration,
             in_point: 10.0,
+            volume: 1.0,
+            muted: false,
             name: id.to_owned(),
         }
     }
@@ -598,5 +662,24 @@ mod tests {
         assert!(RemoveRangeCommand::new(7.0, 5.0).is_err());
         assert!(RemoveRangeCommand::new(-1.0, 5.0).is_err());
         assert!(RemoveRangeCommand::new(f64::NAN, 5.0).is_err());
+    }
+
+    #[test]
+    fn set_audio_applies_gain_and_mute_with_undo() {
+        let mut tl = timeline();
+        tl.insert_clip(clip("a", 0.0, 4.0)).unwrap();
+        assert_eq!((tl.clips["a"].volume, tl.clips["a"].muted), (1.0, false));
+        let mut audio = SetClipAudioCommand::new("a", 0.5, true);
+        audio.execute(&mut tl).unwrap();
+        assert_eq!((tl.clips["a"].volume, tl.clips["a"].muted), (0.5, true));
+        audio.undo(&mut tl).unwrap();
+        assert_eq!((tl.clips["a"].volume, tl.clips["a"].muted), (1.0, false));
+        // Out-of-range gains fail closed.
+        assert!(SetClipAudioCommand::new("a", 99.0, false)
+            .execute(&mut tl)
+            .is_err());
+        assert!(SetClipAudioCommand::new("a", f32::NAN, false)
+            .execute(&mut tl)
+            .is_err());
     }
 }

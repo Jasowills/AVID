@@ -18,12 +18,15 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
   const [clip, setClip] = useState<Clip | null>(null);
   const [start, setStart] = useState("");
   const [duration, setDuration] = useState("");
+  const [volume, setVolume] = useState("");
+  const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setStart("");
     setDuration("");
+    setVolume("");
     setError(null);
     if (!clipId || !isTauri()) {
       setClip(null);
@@ -33,7 +36,10 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
     const load = (): void => {
       invokeCommand<Timeline>("timeline_get")
         .then((timeline) => {
-          if (!cancelled) setClip(timeline.clips[clipId] ?? null);
+          if (cancelled) return;
+          const next = timeline.clips[clipId] ?? null;
+          setClip(next);
+          if (next) setMuted(next.muted);
         })
         .catch(() => {
           if (!cancelled) setClip(null);
@@ -77,6 +83,26 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
     }
   }
 
+  async function onAudio(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    const target = clip;
+    if (!target) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await invokeCommand("timeline_set_clip_audio", {
+        clipId: target.id,
+        volume: volume === "" ? target.volume : Number(volume),
+        muted,
+      });
+      notifyTimelineChanged();
+    } catch (e) {
+      setError(e instanceof IpcError ? e.message : "Audio change failed unexpectedly.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const inputClass =
     "rounded-avid-md border border-avid-border bg-avid-raised px-3 py-2 font-mono text-sm text-avid-primary focus-visible:outline-2 focus-visible:outline-avid-accent";
 
@@ -97,6 +123,12 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
           <dt className="text-avid-muted">Source in</dt>
           <dd className="font-mono text-avid-primary">{clip.in_point.toFixed(2)}s</dd>
         </div>
+        <div className="flex justify-between">
+          <dt className="text-avid-muted">Audio</dt>
+          <dd className="font-mono text-avid-primary">
+            {clip.muted ? "muted" : `×${clip.volume.toFixed(2)}`}
+          </dd>
+        </div>
       </dl>
       <form onSubmit={onTrim} className="mt-3 flex flex-col gap-2 border-t border-avid-border-subtle pt-3">
         <div className="grid grid-cols-2 gap-2">
@@ -111,6 +143,21 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
         </div>
         <Button type="submit" variant="secondary" disabled={busy}>
           {busy ? "Trimming…" : "Apply trim"}
+        </Button>
+      </form>
+      <form onSubmit={onAudio} className="mt-3 flex flex-col gap-2 border-t border-avid-border-subtle pt-3">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex flex-col gap-1 text-xs text-avid-secondary">
+            Volume 0–4
+            <input value={volume} onChange={(e) => setVolume(e.target.value)} placeholder={clip.volume.toFixed(2)} inputMode="decimal" className={inputClass} />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-avid-secondary">
+            <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} className="accent-[#4f8cff]" />
+            Muted
+          </label>
+        </div>
+        <Button type="submit" variant="secondary" disabled={busy}>
+          {busy ? "Applying…" : "Apply audio"}
         </Button>
       </form>
       {error && (

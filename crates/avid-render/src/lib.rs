@@ -68,6 +68,13 @@ pub struct Segment {
     pub seek: f64,
     /// Length to take, seconds.
     pub duration: f64,
+    /// Audio gain for this segment (0 = silent). Older graphs load as 1.0.
+    #[serde(default = "default_gain")]
+    pub gain: f32,
+}
+
+fn default_gain() -> f32 {
+    1.0
 }
 
 /// A burned-in text overlay bound to a timeline range.
@@ -181,10 +188,17 @@ impl RenderGraph {
             args.push(segment.path.display().to_string());
         }
         let n = self.segments.len();
-        // [0:v][0:a][1:v][1:a]…concat → optional drawtext chain → scale/format.
+        // Per-input gain first ([i:a]volume=g[ai]), then interleave
+        // [i:v][ai] into concat → optional drawtext chain → scale/format.
         let mut filter = String::new();
+        for (i, segment) in self.segments.iter().enumerate() {
+            filter.push_str(&format!(
+                "[{i}:a]volume={}[a{i}];",
+                format_gain(segment.gain)
+            ));
+        }
         for i in 0..n {
-            filter.push_str(&format!("[{i}:v][{i}:a]"));
+            filter.push_str(&format!("[{i}:v][a{i}]"));
         }
         filter.push_str(&format!("concat=n={n}:v=1:a=1[vcat][aout];"));
         let mut current = "[vcat]".to_owned();
@@ -226,6 +240,18 @@ impl RenderGraph {
             output.display().to_string(),
         ]);
         Ok(args)
+    }
+}
+
+/// Format a gain value for the `volume` filter without float noise
+/// (`1` not `1.0000001`), so argv stays deterministic and readable.
+fn format_gain(gain: f32) -> String {
+    if gain == 1.0 {
+        "1".to_owned()
+    } else if gain == 0.0 {
+        "0".to_owned()
+    } else {
+        format!("{gain:.3}")
     }
 }
 
@@ -487,10 +513,12 @@ pub fn graph_from_timeline(
                 clip.id
             )));
         };
+        let gain = if clip.muted { 0.0 } else { clip.volume };
         segments.push(Segment {
             path,
             seek: clip.in_point,
             duration: clip.duration,
+            gain,
         });
     }
     let graph = RenderGraph {
@@ -514,11 +542,13 @@ mod tests {
                     path: PathBuf::from("a.mp4"),
                     seek: 1.0,
                     duration: 3.0,
+                    gain: 1.0,
                 },
                 Segment {
                     path: PathBuf::from("b.mp4"),
                     seek: 0.0,
                     duration: 2.0,
+                    gain: 0.5,
                 },
             ],
             overlays: vec![TextOverlay {
@@ -544,6 +574,9 @@ mod tests {
         let joined = first.join(" ");
         assert!(first[0].ends_with("ffmpeg"));
         assert!(joined.contains("concat=n=2:v=1:a=1"));
+        assert!(joined.contains("[0:a]volume=1[a0]"));
+        assert!(joined.contains("[1:a]volume=0.500[a1]"));
+        assert!(joined.contains("[0:v][a0][1:v][a1]concat"));
         assert!(joined.contains("scale=1280:-2"));
         assert!(joined.contains("between(t,0.5,4)"));
         // Escaped overlay text.
@@ -622,6 +655,8 @@ mod tests {
             start,
             duration: 2.0,
             in_point: 0.0,
+            volume: 1.0,
+            muted: false,
             name: name.to_owned(),
         };
         timeline
@@ -697,6 +732,8 @@ mod tests {
             start,
             duration: 2.0,
             in_point: start,
+            volume: 1.0,
+            muted: false,
             name: id.to_owned(),
         };
         // Insert out of order; graph must sort by start.
@@ -766,11 +803,13 @@ mod tests {
                     path: PathBuf::from("seg_a.mp4"),
                     seek: 1.0,
                     duration: 2.0,
+                    gain: 1.0,
                 },
                 Segment {
                     path: PathBuf::from("seg_b.mp4"),
                     seek: 4.0,
                     duration: 2.0,
+                    gain: 1.0,
                 },
             ],
             overlays: vec![],

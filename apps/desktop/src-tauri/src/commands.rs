@@ -379,6 +379,16 @@ pub fn timeline_trim_clip(
 }
 
 #[tauri::command]
+pub fn timeline_set_clip_audio(
+    state: State<'_, crate::AppState>,
+    clip_id: String,
+    volume: f32,
+    muted: bool,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.set_clip_audio(&clip_id, volume, muted))
+}
+
+#[tauri::command]
 pub fn timeline_undo(state: State<'_, crate::AppState>) -> Result<String, CommandError> {
     state.with_session(|session| session.undo())
 }
@@ -711,6 +721,8 @@ fn validate_operation(
                     start: *start,
                     duration: *end - *start,
                     in_point: 0.0,
+                    volume: 1.0,
+                    muted: false,
                     name: text.chars().take(80).collect(),
                 },
             })))
@@ -1127,6 +1139,8 @@ mod tests {
                 start: 0.0,
                 duration: 20.0,
                 in_point: 0.0,
+                volume: 1.0,
+                muted: false,
                 name: "a".to_owned(),
             })
             .unwrap();

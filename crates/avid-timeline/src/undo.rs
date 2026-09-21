@@ -206,6 +206,8 @@ mod tests {
             start,
             duration: 4.0,
             in_point: 0.0,
+            volume: 1.0,
+            muted: false,
             name: id.to_owned(),
         }
     }
