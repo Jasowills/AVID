@@ -13,6 +13,17 @@ export interface ImportedAsset {
   duration: number | null;
 }
 
+/** Filter assets by file name or id (case-insensitive). Pure — tested. */
+export function filterAssets(assets: MediaAsset[], query: string): MediaAsset[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return assets;
+  return assets.filter(
+    (asset) =>
+      asset.file_name.toLowerCase().includes(needle) ||
+      asset.id.toLowerCase().includes(needle),
+  );
+}
+
 /** Format seconds as m:ss.t for display. Pure — unit-tested. */
 export function formatDuration(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return "—";
@@ -38,11 +49,41 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [thumbBusy, setThumbBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
 
   useEffect(() => {
     if (!isTauri()) return;
     invokeCommand<MediaAsset[]>("list_assets").then(setAssets).catch(() => undefined);
   }, [imported]);
+
+  // Thumbnails for video assets resolve lazily after each list refresh.
+  // Best-effort per asset: one failure never blocks the rest.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    const missing = assets.filter(
+      (asset) => asset.dimensions && !thumbs[asset.id],
+    );
+    if (missing.length === 0) return;
+    void (async () => {
+      for (const asset of missing) {
+        if (cancelled) return;
+        try {
+          const relative = await invokeCommand<string>("thumbnail_asset", {
+            assetId: asset.id,
+          });
+          if (!cancelled) setThumbs((prev) => ({ ...prev, [asset.id]: relative }));
+        } catch {
+          // Thumbnail failures stay silent per asset; the manual button retries.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets]);
 
   async function onProbe(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -88,6 +129,8 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
       setThumbBusy(null);
     }
   }
+
+  const filtered = filterAssets(assets, query);
 
   return (
     <Panel title="Media" className="flex-1">
@@ -138,7 +181,7 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
         <div className="mt-3">
           <EmptyState
             title="No file probed"
-            body="Enter a path inside the project folder and probe it. Import and thumbnails land next."
+            body="Enter a path inside the project folder and probe it, or import media below."
           />
         </div>
       )}
@@ -168,46 +211,120 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
 
       {assets.length > 0 && (
         <div className="mt-4 border-t border-avid-border-subtle pt-3">
-          <h3 className="mb-2 text-xs font-medium text-avid-secondary">Project media ({assets.length})</h3>
-          <ul className="flex flex-col gap-1">
-            {assets.map((asset) => (
-              <li
-                key={asset.id}
-                className="flex items-center justify-between gap-2 rounded-avid-sm bg-avid-raised px-2 py-1.5"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-xs font-medium text-avid-primary">{asset.file_name}</span>
-                  <span className="block truncate font-mono text-[11px] text-avid-muted">
-                    {asset.id} · {formatDuration(asset.duration)}
-                  </span>
-                  {thumbs[asset.id] && (
-                    <img
-                      src={streamUrl("project", thumbs[asset.id] as string)}
-                      alt={`Thumbnail of ${asset.file_name}`}
-                      className="mt-1 h-16 rounded-avid-sm border border-avid-border object-cover"
-                    />
-                  )}
-                </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
-                  {asset.dimensions && (
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-xs font-medium text-avid-secondary">
+              Project media ({filtered.length}/{assets.length})
+            </h3>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search media…"
+              aria-label="Search media"
+              className="min-w-0 flex-1 rounded-avid-sm border border-avid-border bg-avid-raised px-2 py-1 text-xs text-avid-primary placeholder:text-avid-muted focus-visible:outline-2 focus-visible:outline-avid-accent"
+            />
+            <span className="flex gap-0.5" role="group" aria-label="Library view">
+              {(["grid", "list"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setView(mode)}
+                  aria-pressed={view === mode}
+                  title={`${mode} view`}
+                  className={`rounded-avid-sm px-2 py-1 text-xs ${
+                    view === mode
+                      ? "bg-avid-raised text-avid-primary"
+                      : "text-avid-muted hover:text-avid-secondary"
+                  }`}
+                >
+                  {mode === "grid" ? "▦" : "☰"}
+                </button>
+              ))}
+            </span>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="text-xs text-avid-muted">No media matches “{query}”.</p>
+          ) : view === "grid" ? (
+            <ul className="grid grid-cols-2 gap-2">
+              {filtered.map((asset) => (
+                <li
+                  key={asset.id}
+                  className="overflow-hidden rounded-avid-md border border-avid-border bg-avid-raised"
+                >
+                  <div className="relative aspect-video bg-avid-overlay">
+                    {thumbs[asset.id] ? (
+                      <img
+                        src={streamUrl("project", thumbs[asset.id] as string)}
+                        alt={`Thumbnail of ${asset.file_name}`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-lg text-avid-muted" aria-hidden="true">
+                        {asset.dimensions ? "▦" : "♪"}
+                      </span>
+                    )}
+                    {asset.duration !== null && (
+                      <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 font-mono text-[10px] text-white">
+                        {formatDuration(asset.duration)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-1 p-1.5">
+                    <span className="min-w-0 truncate text-xs font-medium text-avid-primary" title={asset.file_name}>
+                      {asset.file_name}
+                    </span>
                     <button
-                      onClick={() => onThumbnail(asset.id)}
-                      disabled={thumbBusy === asset.id}
-                      className="rounded-avid-sm px-2 py-1 text-xs text-avid-secondary hover:bg-avid-raised disabled:opacity-50"
+                      onClick={() => onTranscribeAsset(asset.id)}
+                      title={`Transcribe ${asset.file_name}`}
+                      className="shrink-0 rounded-avid-sm px-1.5 py-0.5 text-xs text-avid-accent hover:bg-avid-accent-muted"
                     >
-                      {thumbBusy === asset.id ? "…" : "Thumbnail"}
+                      →
                     </button>
-                  )}
-                  <button
-                    onClick={() => onTranscribeAsset(asset.id)}
-                    className="rounded-avid-sm px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
-                  >
-                    Transcribe →
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {filtered.map((asset) => (
+                <li
+                  key={asset.id}
+                  className="flex items-center justify-between gap-2 rounded-avid-sm bg-avid-raised px-2 py-1.5"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium text-avid-primary">{asset.file_name}</span>
+                    <span className="block truncate font-mono text-[11px] text-avid-muted">
+                      {asset.id} · {formatDuration(asset.duration)}
+                    </span>
+                    {thumbs[asset.id] && (
+                      <img
+                        src={streamUrl("project", thumbs[asset.id] as string)}
+                        alt={`Thumbnail of ${asset.file_name}`}
+                        className="mt-1 h-16 rounded-avid-sm border border-avid-border object-cover"
+                        loading="lazy"
+                      />
+                    )}
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    {asset.dimensions && !thumbs[asset.id] && (
+                      <button
+                        onClick={() => onThumbnail(asset.id)}
+                        disabled={thumbBusy === asset.id}
+                        className="rounded-avid-sm px-2 py-1 text-xs text-avid-secondary hover:bg-avid-raised disabled:opacity-50"
+                      >
+                        {thumbBusy === asset.id ? "…" : "Retry thumb"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => onTranscribeAsset(asset.id)}
+                      className="rounded-avid-sm px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
+                    >
+                      Transcribe →
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </Panel>
