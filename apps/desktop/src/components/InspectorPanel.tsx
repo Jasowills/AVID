@@ -154,7 +154,7 @@ export function InspectorPanel({ clipId }: InspectorPanelProps) {
             <input value={volume} onChange={(e) => setVolume(e.target.value)} placeholder={clip.volume.toFixed(2)} inputMode="decimal" className={inputClass} />
           </label>
           <label className="flex items-center gap-2 text-xs text-avid-secondary">
-            <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} className="accent-[#4f8cff]" />
+            <input type="checkbox" checked={muted} onChange={(e) => setMuted(e.target.checked)} className="accent-avid-accent" />
             Muted
           </label>
         </div>

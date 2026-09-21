@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Timeline } from "@avid/shared-types";
+import { colors } from "@avid/design-system";
 import {
   GUTTER_WIDTH,
   LANE_HEIGHT,
@@ -192,8 +193,8 @@ export function TimelineCanvas({
           const x = GUTTER_WIDTH + time * scale;
           return (
             <g key={time}>
-              <line x1={x} x2={x} y1={14} y2={28} stroke="#455060" />
-              <text x={x + 3} y={12} fill="#6b7480" fontSize={10} fontFamily="monospace">
+              <line x1={x} x2={x} y1={14} y2={28} stroke={colors.border.strong} />
+              <text x={x + 3} y={12} fill={colors.text.muted} fontSize={10} fontFamily="monospace">
                 {formatRulerLabel(time)}
               </text>
             </g>
@@ -221,7 +222,7 @@ export function TimelineCanvas({
       {timeline.tracks.map((track, lane) => (
         <g key={track.id}>
           <rect x={0} y={28 + lane * LANE_HEIGHT} width={totalWidth} height={LANE_HEIGHT} fill="transparent" />
-          <text x={8} y={28 + lane * LANE_HEIGHT + 24} fill="#6b7480" fontSize={11}>
+          <text x={8} y={28 + lane * LANE_HEIGHT + 24} fill={colors.text.muted} fontSize={11}>
             {track.name}
           </text>
           {onToggleLock && (
@@ -258,15 +259,15 @@ export function TimelineCanvas({
                 width={10}
                 height={8}
                 rx={1.5}
-                fill={track.locked ? "#e8eaed" : "none"}
-                stroke="#6b7480"
+                fill={track.locked ? colors.text.primary : "none"}
+                stroke={colors.text.muted}
                 strokeWidth={1.5}
                 pointerEvents="none"
               />
               <path
                 d={`M ${45} ${28 + lane * LANE_HEIGHT + 19} v -3 a 3 3 0 0 1 6 0 v 3`}
                 fill="none"
-                stroke={track.locked ? "#e8eaed" : "#6b7480"}
+                stroke={track.locked ? colors.text.primary : colors.text.muted}
                 strokeWidth={1.5}
                 pointerEvents="none"
               />
@@ -277,7 +278,7 @@ export function TimelineCanvas({
             x2={totalWidth}
             y1={28 + lane * LANE_HEIGHT}
             y2={28 + lane * LANE_HEIGHT}
-            stroke="#23282f"
+            stroke={colors.border.subtle}
           />
         </g>
       ))}
@@ -312,7 +313,7 @@ export function TimelineCanvas({
             height={LANE_HEIGHT - 10}
             rx={4}
             fill={kindFill(rect.kind)}
-            stroke={drag?.id === rect.id ? "#4f8cff" : rect.selected ? "#e8eaed" : "transparent"}
+            stroke={drag?.id === rect.id ? colors.accent.DEFAULT : rect.selected ? colors.text.primary : "transparent"}
             strokeWidth={drag?.id === rect.id || rect.selected ? 2 : 0}
             strokeDasharray={drag?.snapped && drag.id === rect.id ? "4,2" : undefined}
           />
@@ -327,14 +328,14 @@ export function TimelineCanvas({
                 LANE_HEIGHT - 16,
               )}
               fill="none"
-              stroke="#4ade80"
+              stroke={colors.success}
               strokeWidth={1}
               opacity={0.85}
               pointerEvents="none"
             />
           ) : null}
           {rect.width > 40 && (
-            <text x={rect.x + 6} y={28 + rect.lane * LANE_HEIGHT + 25} fill="#e8eaed" fontSize={11}>
+            <text x={rect.x + 6} y={28 + rect.lane * LANE_HEIGHT + 25} fill={colors.text.primary} fontSize={11}>
               {rect.name}
             </text>
           )}
@@ -347,12 +348,12 @@ export function TimelineCanvas({
             x2={GUTTER_WIDTH + playhead * scale}
             y1={0}
             y2={totalHeight}
-            stroke="#e8eaed"
+            stroke={colors.text.primary}
             strokeWidth={1.5}
           />
           <polygon
             points={`${GUTTER_WIDTH + playhead * scale - 5},0 ${GUTTER_WIDTH + playhead * scale + 5},0 ${GUTTER_WIDTH + playhead * scale},8`}
-            fill="#e8eaed"
+            fill={colors.text.primary}
           />
         </g>
       )}

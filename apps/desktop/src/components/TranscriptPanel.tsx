@@ -5,6 +5,7 @@ import { Button, EmptyState, Panel, TextField } from "@avid/ui";
 import type { JobEvent, ModelStatus, Transcript } from "@avid/shared-types";
 import { invokeCommand, IpcError } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
+import { toastSuccess } from "../stores/useToastStore";
 import { usePlaybackStore } from "../stores/usePlaybackStore";
 
 /**
@@ -48,6 +49,7 @@ export function TranscriptPanel({
         language: "en",
       });
       setTranscript(result);
+      toastSuccess(`Transcript ready — ${result.segments.length} segment${result.segments.length === 1 ? "" : "s"}.`);
     } catch (e) {
       setError(e instanceof IpcError ? e.message : "Transcription failed unexpectedly.");
       setErrorCode(e instanceof IpcError ? e.code : null);
@@ -108,8 +110,8 @@ export function TranscriptPanel({
           value={assetId}
           onChange={(e) => setAssetId(e.target.value)}
         />
-        <Button type="submit" variant="primary" disabled={busy || assetId.trim() === ""}>
-          {busy ? "Transcribing…" : "Transcribe (local Whisper)"}
+        <Button type="submit" variant="primary" disabled={busy || assetId.trim() === ""} className="min-w-44">
+          {busy ? `Transcribing ${assetId.trim().slice(0, 12)}…` : "Transcribe (local Whisper)"}
         </Button>
       </form>
 
@@ -173,7 +175,15 @@ export function TranscriptPanel({
         </div>
       )}
 
-      {!transcript && !error && (
+      {busy && !transcript && (
+        <div className="mt-3 flex flex-col gap-2" aria-label="Transcribing" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="avid-skeleton h-8 w-full" style={{ width: `${92 - i * 9}%` }} />
+          ))}
+        </div>
+      )}
+
+      {!transcript && !error && !busy && (
         <div className="mt-3">
           <EmptyState
             title="No transcript yet"

@@ -6,6 +6,7 @@ import type { ApplyReport, JobEvent, RoughCutProposal } from "@avid/shared-types
 import { Button, Panel } from "@avid/ui";
 import { invokeCommand, IpcError } from "../lib/ipc";
 import { notifyTimelineChanged } from "../stores/useJobsStore";
+import { toastSuccess } from "../stores/useToastStore";
 
 /** Human line per operation for review checkboxes and reports. Pure — tested. */
 export function describeEditOperation(op: EditOperation): string {
@@ -140,7 +141,14 @@ export function AiPanel() {
           })),
         ],
       });
+      const applied = result.results.filter((r) => r.applied).length;
       notifyTimelineChanged();
+      toastSuccess(`${result.label} — ${applied} operation${applied === 1 ? "" : "s"} applied.`, {
+        label: "Undo",
+        run: () => {
+          invokeCommand("timeline_undo").then(() => notifyTimelineChanged()).catch(() => undefined);
+        },
+      });
     } catch (e) {
       setApplyError(e instanceof IpcError ? e.message : "Apply failed unexpectedly.");
     } finally {
@@ -176,12 +184,12 @@ export function AiPanel() {
               type="checkbox"
               checked={includeFillers}
               onChange={(e) => setIncludeFillers(e.target.checked)}
-              className="accent-[#4f8cff]"
+              className="accent-avid-accent"
             />
             Fillers
           </label>
-          <Button type="submit" variant="secondary" disabled={proposing || proposalAsset.trim() === ""}>
-            {proposing ? "Analyzing…" : "Propose"}
+          <Button type="submit" variant="secondary" disabled={proposing || proposalAsset.trim() === ""} className="min-w-32">
+            {proposing ? `Analyzing ${proposalAsset.trim().slice(0, 12)}…` : "Propose"}
           </Button>
         </div>
         {proposalNote && <p className="text-xs text-avid-muted">{proposalNote}</p>}
@@ -241,7 +249,7 @@ export function AiPanel() {
                       setReview(review.map((r, i) => (i === index ? { ...r, accepted: !r.accepted } : r)))
                     }
                     aria-label={`Accept: ${describeEditOperation(item.op)}`}
-                    className="mt-1 accent-[#4f8cff]"
+                    className="mt-1 accent-avid-accent"
                   />
                   <span className="font-mono text-xs text-avid-primary">{describeEditOperation(item.op)}</span>
                 </label>
@@ -253,6 +261,7 @@ export function AiPanel() {
               variant="primary"
               onClick={onApply}
               disabled={applying || !review.some((item) => item.accepted)}
+              className="min-w-40"
             >
               {applying ? "Applying…" : `Apply accepted (${review.filter((i) => i.accepted).length})`}
             </Button>

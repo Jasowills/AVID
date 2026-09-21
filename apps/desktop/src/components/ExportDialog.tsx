@@ -4,6 +4,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { EXPORT_PRESETS, type ExportResult, type JobEvent, type Timeline } from "@avid/shared-types";
 import { Button, Icon, Panel } from "@avid/ui";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
+import { toastSuccess } from "../stores/useToastStore";
 
 export interface ExportDialogProps {
   open: boolean;
@@ -68,6 +69,10 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
       });
       setProgress(1);
       setResult(exported);
+      toastSuccess(`Exported ${exported.relative_path} (${exported.duration.toFixed(1)}s verified).`, {
+        label: "Show in folder",
+        run: () => void onRevealPath(exported.absolute_path, setError),
+      });
     } catch (e) {
       setError(e instanceof IpcError ? e.message : "Export failed unexpectedly.");
     } finally {
@@ -75,14 +80,21 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     }
   }
 
-  async function onReveal(): Promise<void> {
-    if (!result) return;
+  async function onRevealPath(
+    absolutePath: string,
+    report: (message: string) => void,
+  ): Promise<void> {
     try {
       const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
-      await revealItemInDir(result.absolute_path);
+      await revealItemInDir(absolutePath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't open the exports folder.");
+      report(e instanceof Error ? e.message : "Couldn't open the exports folder.");
     }
+  }
+
+  async function onReveal(): Promise<void> {
+    if (!result) return;
+    await onRevealPath(result.absolute_path, setError);
   }
 
   const selectClass =
@@ -140,8 +152,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 <Button type="button" variant="ghost" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={busy || filename.trim() === ""}>
-                  {busy ? "Rendering…" : "Export"}
+                <Button type="submit" variant="primary" disabled={busy || filename.trim() === ""} className="min-w-28">
+                  {busy ? `Rendering ${filename.trim() || "video"}…` : "Export"}
                 </Button>
               </div>
               {busy && progress !== null && (
@@ -150,7 +162,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   aria-valuenow={Math.round(progress * 100)}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label="Export progress"
+                  aria-label={`Exporting ${filename.trim() || "video"}`}
                   className="h-1.5 overflow-hidden rounded-full bg-avid-overlay"
                 >
                   <div className="h-full bg-avid-accent" style={{ width: `${progress * 100}%` }} />

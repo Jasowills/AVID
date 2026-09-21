@@ -94,8 +94,8 @@ export function ProvidersPanel() {
           onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
         />
         <div>
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Testing…" : "Test connection"}
+          <Button type="submit" variant="primary" disabled={busy} className="min-w-40">
+            {busy ? `Testing ${config.model.trim() || "model"}…` : "Test connection"}
           </Button>
         </div>
       </form>

@@ -42,6 +42,35 @@ body {
   background-color: var(--color-avid-base);
   color: var(--color-avid-primary);
   font-family: var(--font-sans);
+  caret-color: var(--color-avid-accent);
+}
+
+/* Browser surfaces carry the design too: selection, tabular numerals for
+   timecodes/measurements, visible focus that never shifts layout. */
+::selection {
+  background-color: var(--color-avid-accent-muted);
+  color: var(--color-avid-primary);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-avid-accent);
+  outline-offset: 2px;
+}
+
+/* Skeleton shimmer is structural and subtle; reduced-motion kills it. */
+@keyframes avid-skeleton {
+  from { opacity: 0.45; }
+  to { opacity: 0.85; }
+}
+
+.avid-skeleton {
+  border-radius: var(--radius-avid-sm);
+  background-color: var(--color-avid-raised);
+  animation: avid-skeleton 1.1s ease-in-out infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {

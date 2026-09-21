@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { Toaster } from "./components/Toaster";
 import { Home } from "./pages/Home";
 import { NewProject } from "./pages/NewProject";
 import { Editor } from "./pages/Editor";
@@ -15,6 +16,7 @@ export function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Home />} />
       </Routes>
+      <Toaster />
     </div>
   );
 }

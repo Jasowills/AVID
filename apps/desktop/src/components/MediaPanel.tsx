@@ -47,14 +47,22 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
   const [importError, setImportError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [thumbBusy, setThumbBusy] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
 
   useEffect(() => {
-    if (!isTauri()) return;
-    invokeCommand<MediaAsset[]>("list_assets").then(setAssets).catch(() => undefined);
+    if (!isTauri()) {
+      setAssetsLoading(false);
+      return;
+    }
+    setAssetsLoading(true);
+    invokeCommand<MediaAsset[]>("list_assets")
+      .then(setAssets)
+      .catch(() => undefined)
+      .finally(() => setAssetsLoading(false));
   }, [imported]);
 
   // Thumbnails for video assets resolve lazily after each list refresh.
@@ -141,8 +149,8 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
           value={path}
           onChange={(e) => setPath(e.target.value)}
         />
-        <Button type="submit" variant="primary" disabled={busy || path.trim() === ""}>
-          {busy ? "Probing…" : "Probe file"}
+        <Button type="submit" variant="primary" disabled={busy || path.trim() === ""} className="min-w-36">
+          {busy ? `Probing ${path.trim().split("/").pop() || "file"}…` : "Probe file"}
         </Button>
       </form>
 
@@ -193,8 +201,8 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
           value={source}
           onChange={(e) => setSource(e.target.value)}
         />
-        <Button type="submit" variant="secondary" disabled={importBusy || source.trim() === ""}>
-          {importBusy ? "Importing…" : "Import into project"}
+        <Button type="submit" variant="secondary" disabled={importBusy || source.trim() === ""} className="min-w-44">
+          {importBusy ? `Importing ${source.trim().split("/").pop() || "file"}…` : "Import into project"}
         </Button>
       </form>
 
@@ -209,8 +217,20 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
         </p>
       )}
 
-      {assets.length > 0 && (
-        <div className="mt-4 border-t border-avid-border-subtle pt-3">
+      {assetsLoading ? (
+        <div className="mt-4 border-t border-avid-border-subtle pt-3" aria-label="Loading media">
+          <div className="grid grid-cols-2 gap-2" aria-hidden="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="overflow-hidden rounded-avid-md border border-avid-border">
+                <div className="avid-skeleton aspect-video w-full" />
+                <div className="avid-skeleton mx-2 mb-2 mt-2 h-3 w-2/3" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        assets.length > 0 && (
+          <div className="mt-4 border-t border-avid-border-subtle pt-3">
           <div className="mb-2 flex items-center gap-2">
             <h3 className="text-xs font-medium text-avid-secondary">
               Project media ({filtered.length}/{assets.length})
@@ -326,6 +346,7 @@ export function MediaPanel({ onTranscribeAsset }: { onTranscribeAsset: (assetId:
             </ul>
           )}
         </div>
+        )
       )}
     </Panel>
   );
