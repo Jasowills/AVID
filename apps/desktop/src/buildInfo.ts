@@ -1,6 +1,9 @@
 /**
- * Bundle identity stamp — updated whenever a release bundle is cut so a
- * screenshot or bug report can be tied to an exact commit. Not user-facing
- * product UI; rendered tiny in the Home footer.
+ * Bundle identity stamp — injected at build time from git HEAD, so a
+ * screenshot or bug report ties to the exact commit the bundle was cut from.
+ * Rendered tiny in the Home footer; not product UI.
  */
-export const BUILD_ID = "b5a8148 · 2026-09-21";
+declare const __AVID_BUILD__: string | undefined;
+
+export const BUILD_ID: string =
+  typeof __AVID_BUILD__ === "string" && __AVID_BUILD__.length > 0 ? __AVID_BUILD__ : "dev";
