@@ -97,6 +97,10 @@ pub struct ProjectManifest {
     /// files predate this field and load as empty via the default).
     #[serde(default)]
     pub transcripts: std::collections::HashMap<String, serde_json::Value>,
+    /// Visual scenes by scene id (opaque SceneSpec JSON owned by the
+    /// deterministic visual engine; older files load as empty via default).
+    #[serde(default)]
+    pub visuals: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl ProjectManifest {

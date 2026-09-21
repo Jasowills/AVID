@@ -577,6 +577,122 @@ impl Session {
         self.persist()
     }
 
+    /// Validate a scene id (bare slug — ids travel through IPC and filenames).
+    fn check_scene_id(id: &str) -> Result<(), CommandError> {
+        if id.is_empty()
+            || id.len() > 80
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: "Scene ids use letters, numbers, - and _ (max 80).".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Save a validated visual scene spec under an id (overwrites by design —
+    /// scenes are versioned by the undoable timeline ops that place them).
+    /// The spec must carry a positive `scene.duration` (placement length).
+    pub fn save_visual_scene(
+        &mut self,
+        id: &str,
+        spec: serde_json::Value,
+    ) -> Result<(), CommandError> {
+        Self::check_scene_id(id)?;
+        let duration = spec
+            .pointer("/scene/duration")
+            .and_then(serde_json::Value::as_f64)
+            .filter(|duration| duration.is_finite() && *duration > 0.0)
+            .ok_or_else(|| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: "Scene needs scene.duration > 0.".to_owned(),
+            })?;
+        let _ = duration;
+        self.manifest.visuals.insert(id.to_owned(), spec);
+        self.persist()
+    }
+
+    /// Stored scenes as `(id, spec)` pairs, ordered by id.
+    #[must_use]
+    pub fn list_visual_scenes(&self) -> Vec<(String, serde_json::Value)> {
+        let mut scenes: Vec<(String, serde_json::Value)> = self
+            .manifest
+            .visuals
+            .iter()
+            .map(|(id, spec)| (id.clone(), spec.clone()))
+            .collect();
+        scenes.sort_by(|a, b| a.0.cmp(&b.0));
+        scenes
+    }
+
+    /// Place a stored scene on the graphics track at a start time.
+    /// Creates the G1 track on first use (same additive precedent as captions).
+    /// Duration comes from the scene spec; the clip is fully undoable.
+    pub fn place_visual_on_timeline(
+        &mut self,
+        scene_id: &str,
+        start: f64,
+    ) -> Result<(), CommandError> {
+        let spec = self
+            .manifest
+            .visuals
+            .get(scene_id)
+            .cloned()
+            .ok_or_else(|| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: format!("Unknown visual scene: {scene_id}"),
+            })?;
+        let duration = spec
+            .pointer("/scene/duration")
+            .and_then(serde_json::Value::as_f64)
+            .filter(|duration| duration.is_finite() && *duration > 0.0)
+            .ok_or_else(|| CommandError {
+                code: "AVID_PROJECT_001".to_owned(),
+                message: "Scene needs scene.duration > 0.".to_owned(),
+            })?;
+        if !start.is_finite() || start < 0.0 {
+            return Err(CommandError {
+                code: "AVID_TIMELINE_001".to_owned(),
+                message: "Placement start must be >= 0.".to_owned(),
+            });
+        }
+        if !self
+            .timeline
+            .tracks
+            .iter()
+            .any(|track| track.id == "graphics")
+        {
+            let index = self.timeline.tracks.len() as u32;
+            self.timeline.tracks.push(Track {
+                id: "graphics".to_owned(),
+                kind: TrackKind::Graphics,
+                index,
+                name: "Graphics".to_owned(),
+                locked: false,
+                muted: false,
+            });
+        }
+        self.mutate(
+            "Place visual",
+            Box::new(AddClipCommand {
+                clip: Clip {
+                    id: format!("vis-{scene_id}"),
+                    source_media_id: format!("visual:{scene_id}"),
+                    track_id: "graphics".to_owned(),
+                    start,
+                    duration,
+                    in_point: 0.0,
+                    volume: 1.0,
+                    muted: false,
+                    name: format!("Visual: {scene_id}"),
+                },
+            }),
+        )
+    }
+
     /// Stored transcript for an asset, if transcribed.
     #[must_use]
     pub fn transcript_for(&self, asset_id: &str) -> Option<Transcript> {
@@ -773,6 +889,7 @@ mod tests {
             timeline: serde_json::json!({"tracks": [], "clips": {}}),
             assets: vec![],
             transcripts: HashMap::new(),
+            visuals: std::collections::HashMap::new(),
         }
     }
 
@@ -1098,6 +1215,33 @@ mod tests {
             session.snapshot("x").unwrap();
         }
         assert_eq!(session.list_snapshots().len(), 10);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn visual_scenes_save_list_place_and_undo() {
+        let dir = std::env::temp_dir().join("avid-visual-test");
+        std::fs::remove_dir_all(&dir).ok();
+        let mut session = Session::create(dir.clone(), manifest("vis")).unwrap();
+        let spec = serde_json::json!({
+            "scene": {"width": 1920, "height": 1080, "duration": 8},
+            "elements": [{"type": "node", "id": "a", "x": 0, "y": 0, "label": "A"}],
+            "connections": []
+        });
+        session.save_visual_scene("kafka", spec.clone()).unwrap();
+        assert!(session.save_visual_scene("../evil", spec).is_err());
+        assert!(session.save_visual_scene("ok", serde_json::json!({"no": "scene"})).is_err());
+        assert_eq!(session.list_visual_scenes().len(), 1);
+
+        session.place_visual_on_timeline("kafka", 4.0).unwrap();
+        let placed = &session.timeline().clips["vis-kafka"];
+        assert_eq!((placed.start, placed.duration), (4.0, 8.0));
+        assert_eq!(placed.track_id, "graphics");
+        assert!(session.place_visual_on_timeline("ghost", 0.0).is_err());
+        session.undo().unwrap();
+        assert!(!session.timeline().clips.contains_key("vis-kafka"));
+        // Scene survives undo (only the placement is reverted).
+        assert_eq!(session.list_visual_scenes().len(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
 }

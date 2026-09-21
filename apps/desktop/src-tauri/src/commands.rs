@@ -148,6 +148,7 @@ pub fn create_project_manifest(
         timeline: serde_json::json!({"tracks": [], "clips": {}}),
         assets: vec![],
         transcripts: HashMap::new(),
+        visuals: std::collections::HashMap::new(),
     })
 }
 
@@ -899,6 +900,47 @@ pub fn list_assets(state: State<'_, crate::AppState>) -> Result<Vec<MediaAsset>,
     state.with_session(|session| Ok(session.manifest().assets.clone()))
 }
 
+/// Save a validated visual scene spec under an id.
+#[tauri::command]
+pub fn save_visual_scene(
+    state: State<'_, crate::AppState>,
+    id: String,
+    spec: serde_json::Value,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.save_visual_scene(&id, spec))
+}
+
+/// List stored visual scenes as `{id, spec}` pairs for the visuals UI.
+#[tauri::command]
+pub fn list_visual_scenes(
+    state: State<'_, crate::AppState>,
+) -> Result<Vec<VisualSceneEntry>, CommandError> {
+    state.with_session(|session| {
+        Ok(session
+            .list_visual_scenes()
+            .into_iter()
+            .map(|(id, spec)| VisualSceneEntry { id, spec })
+            .collect())
+    })
+}
+
+/// Stored scene entry for IPC.
+#[derive(Debug, Clone, Serialize)]
+pub struct VisualSceneEntry {
+    pub id: String,
+    pub spec: serde_json::Value,
+}
+
+/// Place a stored scene on the graphics track (undoable, persisted).
+#[tauri::command]
+pub fn place_visual_on_timeline(
+    state: State<'_, crate::AppState>,
+    scene_id: String,
+    start: f64,
+) -> Result<(), CommandError> {
+    state.with_session(|session| session.place_visual_on_timeline(&scene_id, start))
+}
+
 /// List recovery snapshots for a project (newest first).
 #[tauri::command]
 pub fn list_snapshots(
@@ -1129,6 +1171,7 @@ mod tests {
             timeline: serde_json::json!({"tracks": [], "clips": {}}),
             assets: vec![],
             transcripts: std::collections::HashMap::new(),
+            visuals: std::collections::HashMap::new(),
         };
         let mut session = crate::session::Session::create(dir.to_path_buf(), manifest).unwrap();
         session
