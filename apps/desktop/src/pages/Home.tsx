@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Button, EmptyState, Icon, Panel } from "@avid/ui";
 import { NavRail } from "../components/NavRail";
 import { loadProviderSummary } from "../lib/provider";
+import { BUILD_ID } from "../buildInfo";
 import { runningCount, useJobsStore } from "../stores/useJobsStore";
 import { useProjectStore } from "../stores/useProjectStore";
 
@@ -79,6 +80,7 @@ export function Home() {
             </ul>
           )}
 
+          <p className="font-mono text-[10px] text-avid-muted">build {BUILD_ID}</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Panel title="Templates">
               <p className="text-sm text-avid-secondary">
