@@ -4,7 +4,7 @@
 > Legend: `✅ done` · `🚧 in progress` · `⬜ not started` · `⛔ blocked`
 
 **Current phase:** Autopilot pass — engine + verification backbone real; app-integration remaining (see honest accounting below)
-**Last updated:** 2026-09-20 — Tauri backend compiles (3 cmd tests), timeline 18 tests, manifest+traversal, MediaEngine + REAL probe, render graph + REAL render, AI registry + LIVE Ollama eval, edit-plan/scene validators (9+3 tests), template loader (12 templates), transcript model + REAL whisper.cpp verification
+**Last updated:** 2026-09-21 — fix-all pass: audio pipeline, diagrams v1, transcript delete, shortcuts/zoom, thumbnails, AVID.app packaged+launched; 81 Rust + 35 TS tests green — Tauri backend compiles (3 cmd tests), timeline 18 tests, manifest+traversal, MediaEngine + REAL probe, render graph + REAL render, AI registry + LIVE Ollama eval, edit-plan/scene validators (9+3 tests), template loader (12 templates), transcript model + REAL whisper.cpp verification
 **Branch:** `main` · **Remote:** `https://github.com/Jasowills/AVID`
 
 ---
@@ -113,16 +113,18 @@
 - [x] Shipped example: `examples/technical-explainer/project.json` parses as manifest AND as timeline (contract tests)
 - [ ] Template browser + preview + apply-as-commands UI
 
-## Phase 10 — Polish & Release ⬜ (foundations in)
+## Phase 10 — Polish & Release 🚧 (app bundle built; distribution pending)
 
 - [x] A11y defaults (labels, focus states, reduced-motion CSS, no color-alone), CI (scaffold/node/rust), error-code scheme, humane-error mapping in commands
-- [ ] Autosave + crash recovery, perf/stress test, onboarding, packaging + GUI launch verification
+- [x] Autosave (persist-on-mutation) + crash recovery (reload rebuilds state) + recovery snapshots
+- [x] Packaging spike: release binary + `AVID.app` (15 MB) bundles clean; bundled app launches resident error-free. Fixes found: `CMAKE_OSX_DEPLOYMENT_TARGET=10.15` required for whisper.cpp (see blockers); generated iconset committed
+- [ ] Signed `.dmg` (needs Apple Developer identity), GUI pixel click-through, perf/stress run, onboarding tour
 
 ---
 
 ## MVP feature checklist (AGENTS §122 — all must be real, not mocked)
 
-- [x] Desktop app (backend compiles + dev binary runs resident; pixel check = wake-up job) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (proxy + seekable stream + pane)
+- [x] Desktop app (dev + release binaries run resident; `AVID.app` bundled + launched; pixel check + signing = wake-up jobs) · [x] Project creation (dialog + backend manifest + autosaved project dirs) · [x] Media import (command + UI form, live-tested) · [x] Media preview (proxy + seekable stream + pane)
 - [x] Timeline (engine) · [x] Basic editing (6 commands) · [x] Undo/redo (grouped+transactional) · [x] Autosave (persist-on-mutation + recovery snapshots)
 - [x] FFmpeg rendering (graph + real render) · [x] Export (presets + dialog + verified output + show-in-folder + captions SRT) · [x] Local transcription (in-app binding + real test + auto-download) · [x] Transcript editing (phrase→range mapping)
 - [x] AI provider abstraction · [x] Ollama (live eval) · [x] One cloud provider (shape + auth + probe; live call needs a key) · [x] AI rough-cut proposal (detectors + proposal + review + apply)
@@ -146,6 +148,8 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | whisper.cpp install via brew slow (~10 min, bottle pour) | Phase 5 | Installed 1.9.1; model cached in ~/.cache (never committed). In-app whisper-rs binding still pending. |
 | 2026-09-20 | Seekable preview risk (Tauri `asset://` lacks Range support) | arch | Custom `stream://` Range/206 protocol spike in Phase 1; proxy-first H.264/AAC; per-OS preview matrix. Tracked in ARCHITECTURE.md. |
 | 2026-09-20 | Llama-3.1 weights (Community License, not OSI) + H.264/AAC patents | legal | Tracked in LEGAL_AND_LICENSING.md; Qwen3 default; codec patent exposure reviewed separately from copyright. |
+| 2026-09-21 | Release build broke on whisper.cpp C++ (std::filesystem < 10.15) | packaging | **Resolved:** `CMAKE_OSX_DEPLOYMENT_TARGET=10.15` (forwarded by whisper-rs-sys build script; plain `MACOSX_DEPLOYMENT_TARGET` is ignored). Recorded for CI. |
+| 2026-09-21 | Distribution signing identity absent | release | `.dmg`/notarization needs an Apple Developer identity — maintainer job. Unsigned `.app` runs locally. |
 | — | — | — | — |
 
 ## Changelog (scaffold → …)
@@ -157,4 +161,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
 | 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |
 | 2026-09-20 | Autopilot pass 2 (pending push) | In-app whisper-rs binding + REAL in-process transcription test · `save_project` command + disk round-trip tests · Media probe panel + AI plan-check panel (10 desktop tests) · `tauri dev` full cycle (Vite + backend 19.68 s, binary resident error-free; pixel check needs console session) · `tauri:dev` script wired. |
-| 2026-09-21 | Fix-all pass (pending push) | Clip volume/mute (engine validation, render gain filters, trim-style audio command, inspector UI) · diagrams v1 (Mermaid import, SVG renderer, visuals store, place-on-timeline, panel) · transcript segment delete · timeline shortcuts + zoom · Home provider hint · thumbnails (command + panel grid) · packaging attempt (see evidence below). |
+| 2026-09-21 | Fix-all pass | Clip volume/mute (engine validation, render gain, audio command, inspector UI) · diagrams v1 (Mermaid import, SVG renderer, visuals store, place-on-timeline, panel) · transcript segment delete · shortcuts + zoom · Home provider hint · thumbnails (command + panel) · `AVID.app` packaged (15 MB) + launched resident (signing/GUI-pixel = wake-up jobs). |

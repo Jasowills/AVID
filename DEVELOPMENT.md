@@ -38,3 +38,15 @@ CI (`.github/workflows/ci.yml`) runs scaffold-integrity, node (typecheck/test/bu
 - `rustc/cargo not found` → `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal` then `rustup component add rustfmt clippy`. CI installs `rust-toolchain.toml` exactly.
 - `esbuild` install-script warnings → `npm install-scripts approve esbuild` if `vite build` fails on esbuild binary.
 - Large media in git → don't. Use `fixtures/` manifests + tiny generated samples only.
+
+## Packaging (verified 2026-09-21)
+
+```bash
+npx tauri icon src-tauri/icons/icon.png   # once: generates the iconset
+MACOSX_DEPLOYMENT_TARGET=10.15 CMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
+  npm run tauri:build --workspace=@avid/desktop -- --bundles app
+```
+
+- whisper.cpp requires C++17 `std::filesystem` (macOS 10.15+). The `CMAKE_*` var is mandatory: whisper-rs-sys forwards only `CMAKE_`-prefixed env vars to cmake — plain `MACOSX_DEPLOYMENT_TARGET` is ignored and the release build fails. Floor stays 10.15 per research.
+- Output: `target/release/bundle/macos/AVID.app` (~15 MB unsigned). Signed `.dmg` needs an Apple Developer identity (maintainer job).
+- Bundle icons: `tauri.conf.json → bundle.icon` lists the generated set; `icons/` is committed (~356 KB).
