@@ -14,3 +14,5 @@ export { EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
 export { Icon } from "./Icon";
 export type { IconName, IconProps } from "./Icon";
+export { LogoMark } from "./LogoMark";
+export type { LogoMarkProps } from "./LogoMark";

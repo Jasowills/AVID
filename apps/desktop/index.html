@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AVID — AI Video Intelligence &amp; Direction</title>
+    <script>
+      try {
+        var theme = JSON.parse(localStorage.getItem("avid.theme.v1") || "{}").preset;
+        if (theme) document.documentElement.dataset.theme = theme;
+      } catch (e) { /* default theme applies */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

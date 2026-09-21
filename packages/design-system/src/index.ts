@@ -79,3 +79,6 @@ export const typography = {
     xl: "1.25rem",
   },
 } as const;
+
+export { DEFAULT_THEME_ID, THEME_PRESETS, applyThemePreset, loadThemeId } from "./themes";
+export type { ThemePreset } from "./themes";

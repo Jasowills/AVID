@@ -1,3 +1,4 @@
+import { LogoMark } from "@avid/ui";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { invokeCommand, IpcError, isTauri } from "../lib/ipc";
@@ -42,13 +43,14 @@ export function TopBar({ saveStatus = "Not saved yet", onExport }: TopBarProps) 
   }, [startPolling]);
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-avid-border bg-avid-panel px-4">
+    <header className="flex h-10 shrink-0 items-center gap-3 border-b border-avid-border bg-avid-panel px-3">
       <button
         onClick={() => navigate("/")}
-        className="text-sm font-semibold text-avid-primary hover:text-avid-accent-hover"
+        className="flex items-center gap-2 text-avid-primary"
         aria-label="Back to Home"
       >
-        AVID
+        <LogoMark size={18} />
+        <span className="text-sm font-semibold tracking-wide">AVID</span>
       </button>
       <span className="truncate text-sm text-avid-secondary" aria-live="polite">
         {project ? project.name : "No project open"}

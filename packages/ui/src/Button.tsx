@@ -8,7 +8,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClass: Record<ButtonVariant, string> = {
-  primary: "bg-avid-accent text-white hover:bg-avid-accent-hover",
+  primary: "bg-avid-action text-avid-action-text hover:bg-avid-action-hover",
   secondary: "bg-avid-raised text-avid-primary border border-avid-border hover:border-avid-border-strong",
   ghost: "text-avid-secondary hover:text-avid-primary hover:bg-avid-raised",
   danger: "bg-transparent text-avid-danger border border-avid-danger/40 hover:bg-avid-danger/10",

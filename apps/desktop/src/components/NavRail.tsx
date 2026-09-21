@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Icon, type IconName } from "@avid/ui";
+import { Icon, LogoMark, type IconName } from "@avid/ui";
 
 const ITEMS: Array<{ to: string; label: string; icon: IconName; end: boolean }> = [
   { to: "/", label: "Projects", icon: "house", end: true },
@@ -14,11 +14,8 @@ export function NavRail() {
       aria-label="Primary"
       className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-avid-border bg-avid-panel py-3"
     >
-      <span
-        aria-hidden="true"
-        className="mb-3 flex size-8 items-center justify-center rounded-avid-md border border-avid-border-strong text-sm font-bold"
-      >
-        A
+      <span aria-hidden="true" className="mb-3 flex size-8 items-center justify-center text-avid-primary">
+        <LogoMark size={22} />
       </span>
       {ITEMS.map((item) => (
         <NavLink
