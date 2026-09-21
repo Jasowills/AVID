@@ -36,7 +36,9 @@
 
 - [x] MediaEngine: probe (REAL), `probe_file`/`extract_audio` runners, progress tracker + cancellable render runner, builders, traversal guard
 - [x] `import_media`: copy → probe → asset → auto-place first video on V1 (undoable) — LIVE-tested with fixture
-- [x] Media panel: probe form + import form wired to backend (14 desktop tests cover helpers)
+- [x] Media panel: probe form + import form + asset list with generated thumbnails + transcribe handoff, wired to backend
+- [x] Clip audio (§66 minimum): volume 0–4 + mute on the model (validated, back-compat), per-input gain in render lowering, `timeline_set_clip_audio` command, inspector audio form
+- [x] Timeline shortcuts (S split, Delete remove, Cmd/Ctrl+Z undo/redo, field-aware) + zoom 0.5–4x
 - [x] Job system: registry (start/progress/finish/fail/cancel/list) + Channel progress events + `cancel_job`; render streams real ffmpeg fractions, transcribe registers indeterminate jobs
 - [x] Job center UI: Jobs tab (progress bars, cancel, failure reasons) + top-bar running pill (shared polling store)
 - [x] Proxy generation: 540p transcode command + session recording + LIVE test (smaller file, video present); audio-only fails closed with guidance
@@ -46,12 +48,13 @@
 - [ ] Media library grid/list + search + thumbnails UI
 - [ ] Pinned sidecar binaries per triple (uses system ffmpeg until then — ADR-002)
 
-## Phase 3 — Timeline ✅ (engine + working UI; trim/drag pending)
+## Phase 3 — Timeline ✅ (engine + working UI; drag/snapping/markers pending)
 
 - [x] Model: tracks/clips with all §13 fields, overlap validation, locked tracks
 - [x] Commands: Add/Remove/Trim/Move/Split with execute/undo/redo/serialize (18 tests, clippy pedantic, fmt)
 - [x] Grouped + transactional undo (`UndoStack`, manual groups, single-label AI undo)
-- [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved) + inspector trim form
+- [x] UI: SVG canvas (lanes, selection, keyboard operable) + dock (split/remove/undo/redo via backend, autosaved) + inspector trim + audio forms
+- [x] Keyboard: S split, Delete remove, Cmd/Ctrl+Z undo, +Shift redo (skipped in text fields); zoom 0.5–4x
 - [x] Backend session: open project holds manifest+timeline+undo; every mutation persists `project.json` (autosave foundation; reload recovers)
 - [x] Recovery snapshots (§117): pre-apply snapshot (pruned to 10) + list/restore commands + AiPanel restore button; restore restarts history honestly
 - [ ] Drag/zoom/snapping, markers, shortcuts
@@ -72,6 +75,7 @@
 - [x] Rerunnable sidecar verification (`scripts/verify-transcription.sh`): exact transcript + 14 ordered word-segments
 - [x] Transcript model + whisper-JSON parser + phrase→range mapping for text-based delete (7 tests, real output shape)
 - [x] Transcript panel UI wired to `transcribe_media` (segments, ranges, provider label) + in-context model download on `AVID_TRANSCRIBE_001`
+- [x] Per-segment “Remove from timeline” (validated remove_range via apply path, undoable)
 - [x] Model auto-download (`ensure_speech_model` async command + `speech_model_status`; default tiny.en 77 MB to app cache)
 - [ ] VAD chunking + speaker labels
 
@@ -93,10 +97,15 @@
 - [x] `propose_rough_cut`: silence (+fillers when transcribed) → sorted proposal with honest High/Medium confidence + removable totals; feeds the same review checkboxes
 - [x] AI panel: validate → per-op accept/reject → apply → results; proposal flow; visuals honestly deferred to Phase 8; timeline auto-refreshes
 
-## Phase 8 — Visual Intelligence 🚧 (spec validation real, renderer UI pending)
+## Phase 8 — Visual Intelligence ✅ (deterministic visuals v1 real; burn-in + free-form later)
 
-- [x] Scene-spec validator (dangling refs/duplicates/geometry, 3 tests); Mermaid→SceneSpec→ReactFlow→SVG pipeline decided (ADR research)
-- [ ] Deterministic renderer + editable visuals + code visuals UI
+- [x] Scene-spec validator (dangling refs/duplicates/geometry, 3 tests)
+- [x] Mermaid flowchart compiler (TD/TB/LR/RL/BT, auto-layout, 5 tests) + deterministic SVG renderer (escaped, 2 tests)
+- [x] Visuals store: manifest `visuals` map + save/list/place commands + session tests
+- [x] Visuals panel: convert → preview → label editing → save → place on graphics track (undoable); honest export note
+- [x] Visuals store: manifest `visuals` map + save/list/place commands + session tests
+- [x] Visuals panel: Mermaid convert → SVG preview → label editing → save → place on graphics track (undoable)
+- [ ] Burn-in to export + code visuals + React Flow free-form editing
 
 ## Phase 9 — Templates 🚧 (format + content real, browser UI pending)
 
@@ -148,3 +157,4 @@ Color grading suite, advanced VFX, 3D, collaborative cloud editing, stock market
 | 2026-09-20 | Phase 1 shell drop (pending push) | Rust 1.98.1 + fmt/clippy/test green; Vite+React18+TS+Tailwindv4+Zustand shell with tokens, routing, validated project creation (5 vitest), top bar + editor shell (unwired controls disabled+honest); CI node/rust jobs; README t3code-style; repo description+topics set. Tauri backend still pending. |
 | 2026-09-20 | Autopilot engine pass (pending push) | Timeline engine (18 tests) · manifest+traversal · MediaEngine+REAL probe · render graph+REAL render · AI registry+LIVE Ollama eval (qwen2.5:7b) · edit-plan/scene validators (12 tests) · template loader (12 templates) · transcript model+REAL whisper verification · Tauri backend compiles+3 tests · example parses as manifest+timeline. See phase rows for remaining app-integration work. |
 | 2026-09-20 | Autopilot pass 2 (pending push) | In-app whisper-rs binding + REAL in-process transcription test · `save_project` command + disk round-trip tests · Media probe panel + AI plan-check panel (10 desktop tests) · `tauri dev` full cycle (Vite + backend 19.68 s, binary resident error-free; pixel check needs console session) · `tauri:dev` script wired. |
+| 2026-09-21 | Fix-all pass (pending push) | Clip volume/mute (engine validation, render gain filters, trim-style audio command, inspector UI) · diagrams v1 (Mermaid import, SVG renderer, visuals store, place-on-timeline, panel) · transcript segment delete · timeline shortcuts + zoom · Home provider hint · thumbnails (command + panel grid) · packaging attempt (see evidence below). |

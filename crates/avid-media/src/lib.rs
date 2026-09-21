@@ -584,6 +584,19 @@ impl MediaEngine {
         self.run_ffmpeg("extractAudio", &self.extract_audio_command(input, output))
     }
 
+    /// Run single-frame extraction (thumbnails, storyboards).
+    pub fn extract_frame(
+        &self,
+        input: &Path,
+        seconds: f64,
+        output: &Path,
+    ) -> Result<(), MediaError> {
+        self.run_ffmpeg(
+            "extractFrame",
+            &self.extract_frame_command(input, seconds, output),
+        )
+    }
+
     /// Run a command previously built by one of the `*_command` builders.
     /// `argv[0]` must be the ffmpeg binary; kept private so raw strings
     /// never leak out of this crate (AGENTS §11).
