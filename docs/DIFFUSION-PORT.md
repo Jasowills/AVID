@@ -29,7 +29,19 @@
 - **D5 — Minimized = restore strip.** Reference collapses to ruler height; we render a 28px restore strip (same height) rather than a bare ruler, so the control stays discoverable.
 
 ## Queued (not yet ported)
-- `panel-section` / `item-row` / `tabs` chrome for Inspector/Jobs/Transcript
+- `panel-section` / `item-row` chrome for Inspector/Jobs/Transcript
 - `breadcrumbs`, `dialog` chrome (ExportDialog works; revisit its overlay)
-- Media-library rows (`asset-item`, `folder-item`) for the Media panel refresh
 - `menubar`, `dropdown-menu` if menus outgrow the context menu
+- Chat free-form LLM plans (composer routes intents today; Ollama JSON
+  plan-gen is the next AI capability, validated through the same review)
+- Folders/breadcrumbs in Media (assets are flat — omitted honestly, not faked)
+
+## Landed 2026-09-22 (match pass 1)
+- Media → asset library: thumbnail cards, top-left duration badges, select
+  ring, search, grid/list, import + probe disclosures, context menu with
+  Insert-at-playhead (real `timeline_add_clip` at the playhead on the first
+  video track), Transcribe…, Copy asset id, Probe details
+- AI tab → director composer: chat front door over the validated
+  propose/review/apply pipeline; intent router tested; no canned editing
+- Studio Dark + Studio Light presets from their token values
+  (monochrome stays the default identity)

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Channel } from "@tauri-apps/api/core";
 import { validateEditPlan, type EditOperation } from "@avid/ai-protocol";
@@ -38,6 +38,35 @@ const ANALYZED_SOURCES = [
   { key: "assets", label: "Assets" },
 ] as const;
 
+interface DirectorAction {
+  id: string;
+  label: string;
+  run: () => void;
+}
+
+interface DirectorMessage {
+  id: string;
+  role: "user" | "director";
+  text: string;
+  actions?: DirectorAction[];
+}
+
+const GREETING: DirectorMessage = {
+  id: "greeting",
+  role: "director",
+  text: "Director ready. I propose edits from silence, fillers, and pasted plans — every proposal lands below for review, and nothing touches the timeline until you apply it.",
+};
+
+/** Route free text to real operations. Pure — tested. */
+export function matchDirectorIntent(input: string): "cut" | "validate" | "help" {
+  const lower = input.toLowerCase();
+  const wantsCut = /silence|dead air|filler|rough.?cut|um+|uh+|clean|trim|pause|mistake|repeat/.test(lower);
+  const wantsValidate = /valid|plan|json|check/.test(lower);
+  if (wantsCut && !wantsValidate) return "cut";
+  if (wantsValidate) return "validate";
+  return "help";
+}
+
 /** Operation types the backend executes today (visuals land in Phase 8). */
 const SENDABLE_TYPES = new Set(["remove_range", "add_caption", "split_clip"]);
 
@@ -71,9 +100,19 @@ export function AiPanel() {
   const [proposalNote, setProposalNote] = useState<string | null>(null);
   /** Backend `analyzed` split into source keys — null until a proposal (or pasted plan) exists. */
   const [analyzedBy, setAnalyzedBy] = useState<string[] | null>(null);
+  const [messages, setMessages] = useState<DirectorMessage[]>([GREETING]);
+  const [chatInput, setChatInput] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  function onValidate(event: FormEvent): void {
-    event.preventDefault();
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [messages]);
+
+  function say(text: string, actions?: DirectorAction[]): void {
+    setMessages((prev) => [...prev, { id: `d${prev.length}`, role: "director", text, actions }]);
+  }
+
+  function runValidate(): boolean {
     setReport(null);
     setApplyError(null);
     const mediaDuration = Number(duration);
@@ -86,14 +125,19 @@ export function AiPanel() {
       // Pasted plan: AVID analyzed nothing — the review rows stand on their own.
       setAnalyzedBy([]);
       setErrors([]);
-    } else {
-      setReview(null);
-      setErrors(result.errors.map((e) => `${e.path || "(root)"}: ${e.message}`));
+      return true;
     }
+    setReview(null);
+    setErrors(result.errors.map((e) => `${e.path || "(root)"}: ${e.message}`));
+    return false;
   }
 
-  async function onPropose(event: FormEvent): Promise<void> {
+  function onValidate(event: FormEvent): void {
     event.preventDefault();
+    runValidate();
+  }
+
+  async function runPropose(): Promise<boolean> {
     setProposing(true);
     setProposalNote(null);
     setReport(null);
@@ -108,7 +152,7 @@ export function AiPanel() {
       });
       if (proposal.cuts.length === 0) {
         setProposalNote(`Nothing worth cutting found (${proposal.analyzed}). Footage stays untouched.`);
-        return;
+        return false;
       }
       setGoal("rough cut");
       setReview(
@@ -123,11 +167,70 @@ export function AiPanel() {
       setProposalNote(
         `${proposal.cuts.length} cuts proposed, ${proposal.removable_seconds.toFixed(1)}s removable (${proposal.analyzed}). Review below — nothing applied yet.`,
       );
+      return true;
     } catch (e) {
       setProposalNote(e instanceof IpcError ? e.message : "Proposal failed unexpectedly.");
+      return false;
     } finally {
       setProposing(false);
     }
+  }
+
+  function onPropose(event: FormEvent): void {
+    event.preventDefault();
+    void runPropose();
+  }
+
+  /** Route free text to real operations. Anything unrecognized gets the
+   *  honest capability list — never a canned answer pretending to edit. */
+  function onChat(event: FormEvent): void {
+    event.preventDefault();
+    const input = chatInput.trim();
+    if (!input) return;
+    setMessages((prev) => [...prev, { id: `u${prev.length}`, role: "user", text: input }]);
+    setChatInput("");
+    const intent = matchDirectorIntent(input);
+    if (intent === "cut") {
+      if (proposalAsset.trim() === "") {
+        say("I can propose that rough cut — silence plus filler words. Put the asset id in the Asset id field first (copy it from the Media tab), then run it.", [
+          { id: "focus-asset", label: "Propose once the id is set", run: () => void proposeFromChat() },
+        ]);
+        return;
+      }
+      void proposeFromChat();
+      return;
+    }
+    if (intent === "validate") {
+      const ok = runValidate();
+      say(
+        ok
+          ? "Plan checks out — the operations are listed below for review. Accept what you want, then apply as one undoable step."
+          : "That plan doesn't validate — the rejection list is below, and nothing would touch the timeline.",
+      );
+      return;
+    }
+    say("Here's what I can actually run: propose a rough cut from silence and fillers, or validate an edit-plan JSON. Tell me which, in your own words.", [
+      { id: "chip-cut", label: "Propose rough cut", run: () => void proposeFromChat() },
+      { id: "chip-validate", label: "Validate the plan below", run: () => void validateFromChat() },
+    ]);
+  }
+
+  async function proposeFromChat(): Promise<void> {
+    if (proposalAsset.trim() === "") {
+      say("Set the Asset id field first — I need to know which footage to analyze.");
+      return;
+    }
+    const ok = await runPropose();
+    say(
+      ok
+        ? "Proposal's ready below — each cut has a timecode and a confidence. Accept, reject, then apply."
+        : "Nothing worth cutting, or the proposal failed — details are below the form. Footage untouched.",
+    );
+  }
+
+  function validateFromChat(): void {
+    const ok = runValidate();
+    say(ok ? "Valid — review the operations below." : "Invalid — see the rejection list below.");
   }
 
   async function onApply(): Promise<void> {
@@ -179,8 +282,49 @@ export function AiPanel() {
   }
 
   return (
-    <Panel title="AI — plan check" className="flex-1">
-      <form onSubmit={onPropose} className="flex flex-col gap-3 border-b border-avid-border-subtle pb-4">
+    <Panel title="AI — director" className="flex-1">
+      <div className="flex max-h-64 flex-col gap-2 overflow-y-auto border-b border-avid-border-subtle pb-3" aria-label="Director conversation" aria-live="polite">
+        {messages.map((message) => (
+          <div key={message.id} className={message.role === "user" ? "self-end" : "self-start"}>
+            <p
+              className={`max-w-full rounded-avid-md px-2.5 py-1.5 text-xs leading-relaxed ${
+                message.role === "user"
+                  ? "bg-avid-accent-muted text-avid-primary"
+                  : "border border-avid-border-subtle bg-avid-raised text-avid-secondary"
+              }`}
+            >
+              {message.text}
+            </p>
+            {message.actions && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {message.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    onClick={action.run}
+                    className="rounded-avid-sm border border-avid-border bg-avid-raised px-2 py-1 text-xs text-avid-accent hover:bg-avid-accent-muted"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        <div ref={chatEndRef} />
+      </div>
+      <form onSubmit={onChat} className="flex items-center gap-2 border-b border-avid-border-subtle py-2">
+        <input
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          placeholder="Ask the director… (“remove the dead air”)"
+          aria-label="Ask the director"
+          className="h-8 min-w-0 flex-1 rounded-avid-md border border-avid-border bg-avid-raised px-2.5 text-xs text-avid-primary placeholder:text-avid-muted focus-visible:outline-2 focus-visible:outline-avid-accent"
+        />
+        <Button type="submit" variant="secondary" disabled={chatInput.trim() === ""} className="shrink-0">
+          Send
+        </Button>
+      </form>
+      <form onSubmit={onPropose} className="mt-3 flex flex-col gap-3 border-b border-avid-border-subtle pb-4">
         <p className="text-sm font-medium text-avid-primary">Rough-cut proposal</p>
         <label className="flex flex-col gap-1 text-sm text-avid-secondary">
           Asset id

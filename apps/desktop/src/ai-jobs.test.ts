@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeEditOperation, formatTimecode } from "./components/AiPanel";
+import { describeEditOperation, formatTimecode, matchDirectorIntent } from "./components/AiPanel";
 import { runningCount } from "./stores/useJobsStore";
 import type { JobRecord } from "@avid/shared-types";
 
@@ -13,6 +13,17 @@ describe("describeEditOperation", () => {
     ).toContain("VISUAL diagram");
     expect(describeEditOperation({ type: "add_caption", start: 1, end: 2, text: "Hi" })).toContain("CAPTION");
     expect(describeEditOperation({ type: "split_clip", clipId: "a", at: 3 })).toBe("SPLIT a @ 00:03.0");
+  });
+});
+
+describe("matchDirectorIntent", () => {
+  it("routes editing language to real operations, everything else to help", () => {
+    expect(matchDirectorIntent("remove the dead air")).toBe("cut");
+    expect(matchDirectorIntent("Clean up the umms and long pauses")).toBe("cut");
+    expect(matchDirectorIntent("validate this plan JSON")).toBe("validate");
+    expect(matchDirectorIntent("check my plan")).toBe("validate");
+    expect(matchDirectorIntent("what can you do?")).toBe("help");
+    expect(matchDirectorIntent("make it viral")).toBe("help");
   });
 });
 
