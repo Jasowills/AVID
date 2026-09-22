@@ -36,6 +36,14 @@ const ACTIVE_TABS = ["Media", "Transcript", "AI", "Jobs", "Visuals"] as const;
 type ActiveTab = (typeof ACTIVE_TABS)[number];
 const COMING_TABS = ["Scenes", "Templates", "Assets", "Audio", "Captions"] as const;
 
+const TAB_ICONS: Record<ActiveTab, "film" | "mic" | "layers" | "clock" | "grid"> = {
+  Media: "film",
+  Transcript: "mic",
+  AI: "layers",
+  Jobs: "clock",
+  Visuals: "grid",
+};
+
 /** Left rail width follows the tab: composer tabs get room, browsers stay slim. */
 function railWidth(tab: ActiveTab): number {
   return tab === "AI" ? 340 : 264;
@@ -60,6 +68,7 @@ export function Editor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [resizing, setResizing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const resizeStart = useRef({ y: 0, height: 0 });
   const layersScroll = useRef<HTMLDivElement | null>(null);
 
@@ -172,6 +181,74 @@ export function Editor() {
           }}
         >
           <aside className="flex min-h-0 min-w-0 flex-col bg-avid-panel" aria-label="Side panels">
+            <div className="flex h-10 shrink-0 items-center gap-1 border-b border-avid-border-subtle px-2">
+              <div className="relative">
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-expanded={menuOpen}
+                  aria-label="Project menu"
+                  title={project.name}
+                  className="rounded-avid-sm p-1.5 text-avid-muted hover:bg-avid-raised hover:text-avid-secondary"
+                >
+                  <Icon name="folder" size={15} />
+                </button>
+                {menuOpen && (
+                  <>
+                    <button
+                      aria-label="Close project menu"
+                      className="fixed inset-0 z-40 cursor-default"
+                      onClick={() => setMenuOpen(false)}
+                    />
+                    <div
+                      role="menu"
+                      aria-label="Project menu"
+                      className="absolute left-0 top-full z-50 mt-1 w-52 rounded-avid-md border border-avid-border bg-avid-overlay p-1 shadow-xl"
+                    >
+                      {[
+                        { id: "home", label: "Back to Home", run: () => navigate("/") },
+                        { id: "new", label: "New project", run: () => navigate("/projects/new") },
+                        { id: "settings", label: "Open Settings", run: () => navigate("/settings") },
+                        { id: "palette", label: "Command palette", hint: "⌘K", run: () => setPaletteOpen(true) },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            item.run();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-avid-sm px-2 py-1.5 text-left text-xs text-avid-primary hover:bg-avid-raised"
+                        >
+                          <span className="flex-1">{item.label}</span>
+                          {item.hint && <span className="font-mono text-[10px] text-avid-muted">{item.hint}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <span className="min-w-0 flex-1 truncate text-xs text-avid-muted" title={project.name}>
+                {project.name}
+              </span>
+              <Tooltip label={timelineMinimized ? "Restore timeline" : "Minimize timeline"} shortcut="Alt+T">
+                <button
+                  onClick={toggleTimeline}
+                  aria-label={timelineMinimized ? "Restore timeline" : "Minimize timeline"}
+                  className="rounded-avid-sm p-1.5 text-avid-muted hover:bg-avid-raised hover:text-avid-secondary"
+                >
+                  <Icon name="panelBottom" size={15} />
+                </button>
+              </Tooltip>
+              <Tooltip label="Hide interface (focus canvas)" shortcut="Alt+U">
+                <button
+                  onClick={toggleUI}
+                  aria-label="Hide interface"
+                  className="rounded-avid-sm p-1.5 text-avid-muted hover:bg-avid-raised hover:text-avid-secondary"
+                >
+                  <Icon name="panelLeft" size={15} />
+                </button>
+              </Tooltip>
+            </div>
             <nav
               className="mx-2 mt-2 flex flex-wrap gap-0.5 rounded-avid-md bg-avid-raised p-0.5"
               aria-label="Panel tabs"
@@ -181,12 +258,14 @@ export function Editor() {
                   key={name}
                   onClick={() => setTab(name)}
                   aria-pressed={tab === name}
-                  className={`rounded-avid-sm px-2 py-1 text-xs ${
+                  title={name}
+                  className={`flex items-center gap-1.5 rounded-avid-sm px-2 py-1 text-xs ${
                     tab === name
                       ? "bg-avid-overlay text-avid-primary shadow-sm"
                       : "text-avid-muted hover:text-avid-secondary"
                   }`}
                 >
+                  <Icon name={TAB_ICONS[name]} size={13} />
                   {name}
                 </button>
               ))}

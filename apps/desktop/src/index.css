@@ -44,6 +44,28 @@
 }
 
 :root,
+[data-theme="studio-light"] {
+  --avid-base: hsl(0, 0%, 100%);
+  --avid-panel: hsl(0, 0%, 97%);
+  --avid-raised: hsl(0, 0%, 95%);
+  --avid-overlay: hsl(0, 0%, 100%);
+  --avid-border-subtle: hsl(0, 0%, 91%);
+  --avid-border: hsl(0, 0%, 88%);
+  --avid-border-strong: hsl(0, 0%, 78%);
+  --avid-primary: hsl(240, 5%, 9%);
+  --avid-secondary: hsl(0, 0%, 32%);
+  --avid-muted: hsl(0, 0%, 45%);
+  --avid-action: hsl(207, 100%, 45%);
+  --avid-action-text: hsl(0, 0%, 100%);
+  --avid-action-hover: hsl(207, 98%, 35%);
+  --avid-accent: hsl(207, 100%, 40%);
+  --avid-accent-hover: hsl(207, 100%, 32%);
+  --avid-accent-muted: hsla(207, 100%, 50%, 0.12);
+  --avid-success: hsl(162, 66%, 29%);
+  --avid-warning: hsl(46, 90%, 40%);
+  --avid-danger: hsl(0, 79%, 45%);
+}
+
 [data-theme="monochrome"] {
   --avid-base: #0a0a0b;
   --avid-panel: #101014;

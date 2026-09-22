@@ -265,7 +265,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ];
 
-export const DEFAULT_THEME_ID = "monochrome";
+export const DEFAULT_THEME_ID = "studio-light";
 
 const STORAGE_KEY = "avid.theme.v1";
 
