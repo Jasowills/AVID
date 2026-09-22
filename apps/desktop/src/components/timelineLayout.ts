@@ -6,6 +6,8 @@ export const PX_PER_SECOND = 24;
 export const LANE_HEIGHT = 40;
 /** Left gutter for track names. */
 export const GUTTER_WIDTH = 64;
+/** Ruler strip height (px) — the Layers column aligns its spacer to this. */
+export const RULER_HEIGHT = 28;
 
 export interface ClipRect {
   id: string;
@@ -23,6 +25,7 @@ export function layoutTimeline(
   timeline: Timeline,
   selectedId: string | null,
   zoom = 1,
+  gutter = GUTTER_WIDTH,
 ): { rects: ClipRect[]; totalWidth: number; totalHeight: number; duration: number } {
   const scale = PX_PER_SECOND * zoom;
   const lanes = timeline.tracks;
@@ -40,7 +43,7 @@ export function layoutTimeline(
       id: clip.id,
       name: clip.name,
       sourceMediaId: clip.source_media_id,
-      x: GUTTER_WIDTH + clip.start * scale,
+      x: gutter + clip.start * scale,
       width: Math.max(4, clip.duration * scale),
       lane,
       kind: track?.kind ?? "video",
@@ -49,8 +52,8 @@ export function layoutTimeline(
   });
   return {
     rects,
-    totalWidth: GUTTER_WIDTH + Math.max(duration * scale, 200),
-    totalHeight: Math.max(lanes.length, 1) * LANE_HEIGHT + 28,
+    totalWidth: gutter + Math.max(duration * scale, 200),
+    totalHeight: Math.max(lanes.length, 1) * LANE_HEIGHT + RULER_HEIGHT,
     duration,
   };
 }

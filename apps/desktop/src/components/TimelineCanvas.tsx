@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
-import type { Timeline } from "@avid/shared-types";
+import type { Clip, Timeline } from "@avid/shared-types";
 import { colors } from "@avid/design-system";
+import { ContextMenu } from "@avid/ui";
+import type { ContextMenuItem } from "@avid/ui";
 import {
   GUTTER_WIDTH,
   LANE_HEIGHT,
@@ -32,6 +34,14 @@ export interface TimelineCanvasProps {
   onToggleLock?: (trackId: string, locked: boolean) => void;
   /** Waveform peaks keyed by clip source_media_id. Absent clips render flat. */
   peaksByMedia?: Record<string, number[]>;
+  /** Left gutter width. The Layers column replaces the built-in gutter with 0. */
+  gutter?: number;
+  /** Hide the built-in track names + locks (shown in the Layers column instead). */
+  hideTrackChrome?: boolean;
+  /** Split a clip (context menu). Absent disables the item with a reason. */
+  onSplitClip?: (clip: Clip) => void;
+  /** Remove a clip (context menu). Absent disables the item with a reason. */
+  onRemoveClip?: (clip: Clip) => void;
 }
 
 interface DragState {
@@ -64,10 +74,15 @@ export function TimelineCanvas({
   onTrimClip,
   onToggleLock,
   peaksByMedia,
+  gutter = GUTTER_WIDTH,
+  hideTrackChrome = false,
+  onSplitClip,
+  onRemoveClip,
 }: TimelineCanvasProps) {
   const scale = PX_PER_SECOND * zoom;
-  const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId, zoom);
+  const { rects, totalWidth, totalHeight, duration } = layoutTimeline(timeline, selectedId, zoom, gutter);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const movedRef = useRef(false);
 
@@ -77,7 +92,7 @@ export function TimelineCanvas({
   const timeAt = (clientX: number): number => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return 0;
-    return Math.max(0, (clientX - rect.left - GUTTER_WIDTH) / scale);
+    return Math.max(0, (clientX - rect.left - gutter) / scale);
   };
 
   const edgesFor = (excludeId: string): number[] => {
@@ -121,7 +136,7 @@ export function TimelineCanvas({
     const pointerTime = timeAt(e.clientX);
     // Movement gate keeps clicks selecting without starting drags.
     const svgX = e.clientX - (svgRef.current?.getBoundingClientRect().left ?? 0);
-    if (Math.abs(svgX - (GUTTER_WIDTH + (drag.origStart + drag.grabOffset) * scale)) > 3) {
+    if (Math.abs(svgX - (gutter + (drag.origStart + drag.grabOffset) * scale)) > 3) {
       movedRef.current = true;
     }
     if (!movedRef.current) return;
@@ -163,14 +178,39 @@ export function TimelineCanvas({
     if (drag && drag.id === rect.id) {
       return {
         ...rect,
-        x: GUTTER_WIDTH + drag.curStart * scale,
+        x: gutter + drag.curStart * scale,
         width: Math.max(4, drag.curDuration * scale),
       };
     }
     return rect;
   });
 
+  const menuClip: Clip | null = menu ? (timeline.clips[menu.id] ?? null) : null;
+  const backendHint = "Timeline editing needs the desktop backend (running in the browser).";
+  const menuItems: ContextMenuItem[] = menuClip
+    ? [
+        {
+          id: "split",
+          label: `Split ${menuClip.name} at middle`,
+          hint: "S",
+          disabled: !onSplitClip,
+          disabledReason: backendHint,
+          run: () => onSplitClip?.(menuClip),
+        },
+        {
+          id: "remove",
+          label: `Remove ${menuClip.name}`,
+          hint: "⌫",
+          danger: true,
+          disabled: !onRemoveClip,
+          disabledReason: backendHint,
+          run: () => onRemoveClip?.(menuClip),
+        },
+      ]
+    : [];
+
   return (
+    <>
     <svg
       ref={svgRef}
       role="img"
@@ -190,7 +230,7 @@ export function TimelineCanvas({
       {/* Ruler */}
       <g role="presentation">
         {ticks.map((time) => {
-          const x = GUTTER_WIDTH + time * scale;
+          const x = gutter + time * scale;
           return (
             <g key={time}>
               <line x1={x} x2={x} y1={14} y2={28} stroke={colors.border.strong} />
@@ -202,9 +242,9 @@ export function TimelineCanvas({
         })}
         {onSeek && (
           <rect
-            x={GUTTER_WIDTH}
+            x={gutter}
             y={0}
-            width={Math.max(totalWidth - GUTTER_WIDTH, 0)}
+            width={Math.max(totalWidth - gutter, 0)}
             height={28}
             fill="transparent"
             style={{ cursor: "pointer" }}
@@ -212,7 +252,7 @@ export function TimelineCanvas({
               e.stopPropagation();
               const rect = svgRef.current?.getBoundingClientRect();
               if (!rect) return;
-              onSeek(Math.max(0, (e.clientX - rect.left - GUTTER_WIDTH) / scale));
+              onSeek(Math.max(0, (e.clientX - rect.left - gutter) / scale));
             }}
           >
             <title>Seek</title>
@@ -222,10 +262,12 @@ export function TimelineCanvas({
       {timeline.tracks.map((track, lane) => (
         <g key={track.id}>
           <rect x={0} y={28 + lane * LANE_HEIGHT} width={totalWidth} height={LANE_HEIGHT} fill="transparent" />
-          <text x={8} y={28 + lane * LANE_HEIGHT + 24} fill={colors.text.muted} fontSize={11}>
-            {track.name}
-          </text>
-          {onToggleLock && (
+          {!hideTrackChrome && (
+            <text x={8} y={28 + lane * LANE_HEIGHT + 24} fill={colors.text.muted} fontSize={11}>
+              {track.name}
+            </text>
+          )}
+          {onToggleLock && !hideTrackChrome && (
             <g
               role="button"
               aria-label={`${track.locked ? "Unlock" : "Lock"} track ${track.name}`}
@@ -274,7 +316,7 @@ export function TimelineCanvas({
             </g>
           )}
           <line
-            x1={GUTTER_WIDTH}
+            x1={gutter}
             x2={totalWidth}
             y1={28 + lane * LANE_HEIGHT}
             y2={28 + lane * LANE_HEIGHT}
@@ -303,6 +345,12 @@ export function TimelineCanvas({
           onPointerDown={(e) => {
             const clip = timeline.clips[rect.id];
             if (clip) beginDrag(e, rect, clip);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onSelect(rect.id);
+            setMenu({ id: rect.id, x: e.clientX, y: e.clientY });
           }}
           style={{ cursor: onMoveClip || onTrimClip ? "grab" : "pointer" }}
         >
@@ -344,19 +392,23 @@ export function TimelineCanvas({
       {playhead !== null && Number.isFinite(playhead) && (
         <g role="presentation" pointerEvents="none">
           <line
-            x1={GUTTER_WIDTH + playhead * scale}
-            x2={GUTTER_WIDTH + playhead * scale}
+            x1={gutter + playhead * scale}
+            x2={gutter + playhead * scale}
             y1={0}
             y2={totalHeight}
             stroke={colors.text.primary}
             strokeWidth={1.5}
           />
           <polygon
-            points={`${GUTTER_WIDTH + playhead * scale - 5},0 ${GUTTER_WIDTH + playhead * scale + 5},0 ${GUTTER_WIDTH + playhead * scale},8`}
+            points={`${gutter + playhead * scale - 5},0 ${gutter + playhead * scale + 5},0 ${gutter + playhead * scale},8`}
             fill={colors.text.primary}
           />
         </g>
       )}
     </svg>
+    {menu && (
+      <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+    )}
+    </>
   );
 }

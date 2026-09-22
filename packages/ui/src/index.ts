@@ -16,3 +16,8 @@ export { Icon } from "./Icon";
 export type { IconName, IconProps } from "./Icon";
 export { LogoMark } from "./LogoMark";
 export type { LogoMarkProps } from "./LogoMark";
+export { Tooltip } from "./Tooltip";
+export type { TooltipProps } from "./Tooltip";
+export { Kbd } from "./Kbd";
+export { ContextMenu, ContextArea, clampMenuPosition } from "./ContextMenu";
+export type { ContextMenuItem, ContextMenuProps } from "./ContextMenu";

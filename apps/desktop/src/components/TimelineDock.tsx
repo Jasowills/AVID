@@ -15,15 +15,17 @@ export function TimelineDock({
   projectId,
   selectedId,
   onSelect,
+  zoom,
 }: {
   projectId: string;
   selectedId: string | null;
   onSelect: (clipId: string | null) => void;
+  /** Zoom level owned by the editor shell (the tools cell renders the control). */
+  zoom: number;
 }) {
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [zoom, setZoom] = useState(1);
   const [peaksByMedia, setPeaksByMedia] = useState<Record<string, number[]>>({});
   const currentTime = usePlaybackStore((state) => state.currentTime);
   const requestSeek = usePlaybackStore((state) => state.requestSeek);
@@ -85,12 +87,6 @@ export function TimelineDock({
 
   const handleMove = (clipId: string, start: number): void => {
     void mutate("Move", () => invokeCommand("timeline_move_clip", { clipId, start }));
-  };
-
-  const handleToggleLock = (trackId: string, locked: boolean): void => {
-    void mutate(locked ? "Lock track" : "Unlock track", () =>
-      invokeCommand("timeline_set_track_locked", { trackId, locked }),
-    );
   };
 
   const handleTrim = (clipId: string, start: number, duration: number): void => {
@@ -164,21 +160,6 @@ export function TimelineDock({
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-2 pb-2">
         <span className="text-xs font-medium text-avid-secondary">Timeline</span>
-        <span className="flex items-center gap-0.5" role="group" aria-label="Zoom">
-          {[0.5, 1, 2, 4].map((level) => (
-            <button
-              key={level}
-              onClick={() => setZoom(level)}
-              aria-pressed={zoom === level}
-              title={`Zoom ${level}x`}
-              className={`rounded-avid-sm px-1.5 py-1 font-mono text-[11px] ${
-                zoom === level ? "bg-avid-raised text-avid-primary" : "text-avid-muted hover:text-avid-secondary"
-              }`}
-            >
-              {level}x
-            </button>
-          ))}
-        </span>
         <span className="ml-auto flex items-center gap-1">
           <button
             disabled={!backend || busy || !selected}
@@ -231,10 +212,28 @@ export function TimelineDock({
             peaksByMedia={peaksByMedia}
             zoom={zoom}
             playhead={currentTime}
+            gutter={0}
+            hideTrackChrome
             onSeek={backend ? (time) => requestSeek(time) : undefined}
             onMoveClip={backend ? handleMove : undefined}
             onTrimClip={backend ? handleTrim : undefined}
-            onToggleLock={backend ? handleToggleLock : undefined}
+            onToggleLock={undefined}
+            onSplitClip={
+              backend
+                ? (clip) =>
+                    mutate("Split", () =>
+                      invokeCommand("timeline_split_clip", {
+                        clipId: clip.id,
+                        at: clip.start + clip.duration / 2,
+                      }),
+                    )
+                : undefined
+            }
+            onRemoveClip={
+              backend
+                ? (clip) => mutate("Remove", () => invokeCommand("timeline_remove_clip", { clipId: clip.id }))
+                : undefined
+            }
           />
         ) : (
           <div className="flex h-full items-center justify-center p-4">

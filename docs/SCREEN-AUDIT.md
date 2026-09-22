@@ -81,10 +81,13 @@ sidebar rows stack (§8 grid discipline).
   (§100).
 
 ## Remaining layout/styling debt (ordered)
-1. Resizable + collapsible panels/timeline (§§9–10) — biggest editor feel gap.
-2. Command palette (§§33–34) — researched, hand-rolled, queued.
-3. Toolbar grouping in TimelineDock (§16) + model selector control (§46).
-4. Breadcrumbs/back-nav + navigation persistence (§§12–13, §55).
-5. Styled tooltips (§31), density modes (§83), light-mode deliberate pass
-   (§86), offline/unavailable/retry states (§§94–95), version-history
-   browser (§98), destructive confirms (§99).
+1. ~~Resizable + collapsible panels/timeline (§§9–10)~~ ✅ 2026-09-22 —
+   Diffusion-grid port: resizable + minimizable timeline, persisted layout,
+   hide-UI focus mode (`docs/DIFFUSION-PORT.md`). Collapsible side rails queued.
+2. ~~Command palette (§§33–34)~~ ✅ 2026-09-22 — ⌘/Ctrl+K, real commands only.
+3. ~~Styled tooltips (§31), context menus (§37)~~ ✅ 2026-09-22 — shared
+   primitives, applied to timeline clips + tools cell (media rows queued).
+4. Toolbar grouping in TimelineDock (§16) + model selector control (§46).
+5. Breadcrumbs/back-nav (§§12–13), density modes (§83), light-mode
+   deliberate pass (§86), offline/unavailable/retry states (§§94–95),
+   version-history browser (§98), destructive confirms (§99).

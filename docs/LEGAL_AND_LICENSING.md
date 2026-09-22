@@ -25,6 +25,7 @@
 | tldraw | — | Custom SDK license (NOT OSI; watermark + paid removal) | — | **Do not embed in MVP** | Re-evaluate post-MVP as optional plugin with legal sign-off | ⛔ rejected MVP |
 | Excalidraw | — | MIT | — | OK but wrong visual language | Rejected on product grounds | ⬜ not used |
 | Remotion | — | Code MIT; bundled FFmpeg binary GPLv2+ | Selective preview-pipeline use only | GPL binary — do not bundle blindly | Evaluate if adopted | 🚧 evaluate if used |
+| diffusionstudio/editor UI structure (port, not fork) | Git 57c3983 (2026-09-22) | MPL-2.0 | Editor grid shell, layout state, command/tooltip/menu/tab primitives re-implemented in React against AVID stores; NO engine code, NO brand assets, NO SolidJS/Kobalte copied verbatim | Larger Work per MPL §3.3: ported files keep MPL headers + this row; Exhibit A preserved in `docs/DIFFUSION-PORT.md` | ✅ cleared (structure port; headers required on ported files) |
 | Fonts / icons / template assets | Each asset pinned | Per-asset (OFL/Apache/CC0 preferred) | Bundled | Verify per asset | No copyrighted logos fetched from web (AGENTS §71) | ⬜ per-asset rows in Phase 9 |
 | Parakeet/NeMo weights | — | Often NC/research | — | Legal review required before any use | Not MVP | ⛔ not in MVP |
 

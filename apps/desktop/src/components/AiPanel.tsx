@@ -225,11 +225,11 @@ export function AiPanel() {
                 const covered = analyzedBy.includes(source.key);
                 return (
                   <li key={source.key} className="flex items-center gap-2 text-xs">
-                    <span aria-hidden className={covered ? "text-avid-success" : "text-avid-faint"}>
+                    <span aria-hidden className={covered ? "text-avid-success" : "text-avid-muted"}>
                       {covered ? "✓" : "—"}
                     </span>
                     <span className="text-avid-primary">{source.label}</span>
-                    <span className="text-avid-faint">{covered ? "checked" : "not covered"}</span>
+                    <span className="text-avid-muted">{covered ? "checked" : "not covered"}</span>
                   </li>
                 );
               })}
@@ -285,7 +285,7 @@ export function AiPanel() {
             {review.map((item, index) => (
               <li key={`${describeEditOperation(item.op)}-${index}`}>
                 <label className="flex cursor-pointer items-start gap-2 rounded-avid-sm bg-avid-raised px-2 py-1">
-                  <span className="mt-0.5 w-6 shrink-0 text-right font-mono text-xs text-avid-faint">{index + 1}.</span>
+                  <span className="mt-0.5 w-6 shrink-0 text-right font-mono text-xs text-avid-muted">{index + 1}.</span>
                   <input
                     type="checkbox"
                     checked={item.accepted}
@@ -298,7 +298,7 @@ export function AiPanel() {
                   <span className="font-mono text-xs text-avid-primary">
                     {describeEditOperation(item.op)}
                     {item.confidence && (
-                      <span className="ml-2 text-avid-faint">
+                      <span className="ml-2 text-avid-muted">
                         · {item.confidence === "high" ? "High" : "Medium"} confidence
                       </span>
                     )}
